@@ -20,7 +20,11 @@ function svg($name) {
         'upload' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
         'close' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
         'music' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+        'mail' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2.5 6.5l9.5 6 9.5-6"/></svg>',
+        'api' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg>',
+        'db' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.7-4 3-9 3s-9-1.3-9-3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/></svg>',
         'disc' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>',
+        'chev' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>',
     ];
     return $icons[$name] ?? '';
 }
@@ -30,12 +34,43 @@ $navItems = [
     'keys' => ['label' => '密钥', 'icon' => svg('key')],
     'users' => ['label' => '人员', 'icon' => svg('user')],
     'config' => ['label' => '配置', 'icon' => svg('config')],
-    'settings' => ['label' => '设置', 'icon' => svg('srv')],
+    'domains' => ['label' => '域名', 'icon' => svg('shield')],
+    // 设置页拆分后收进「设置」的下拉子菜单：主菜单只保留一项，子项在侧边栏展开
+    'settings' => [
+        'label' => '设置',
+        'icon' => svg('srv'),
+        'children' => [
+            'settings-site' => ['label' => '站点', 'icon' => svg('img')],
+            'settings-mail' => ['label' => '邮件', 'icon' => svg('mail')],
+            'settings-security' => ['label' => '安全', 'icon' => svg('shield')],
+            'settings-api' => ['label' => '接口', 'icon' => svg('api')],
+            'settings-storage' => ['label' => '储存', 'icon' => svg('db')],
+        ],
+    ],
 ];
-// 人员与设置仅管理员可见（顶部、侧边栏、底部导航共用这一份过滤）
+// 人员与设置仅管理员可见（顶部、侧边栏、底部导航共用这一份过滤）。
+// 名单与页面级兜底同源：includes/routes.php 的 $adminOnlyActions（admin/index.php 已先行 require）。
 if ((($_SESSION['admin_is_admin'] ?? 99) > 1)) {
-    unset($navItems['users'], $navItems['settings']);
+    foreach ($adminOnlyActions as $__aoAction) {
+        if (isset($navItems[$__aoAction])) { unset($navItems[$__aoAction]); continue; }
+        foreach ($navItems as $__aoKey => $__aoItem) {
+            if (!isset($navItems[$__aoKey]['children'][$__aoAction])) continue;
+            unset($navItems[$__aoKey]['children'][$__aoAction]);
+            if (empty($navItems[$__aoKey]['children'])) unset($navItems[$__aoKey]);
+        }
+    }
 }
+// 子菜单展平：标题、各处激活态都要能按 action 反查（子项激活时高亮父菜单）
+$navFlat = [];
+$navParents = [];
+foreach ($navItems as $k => $item) {
+    $navFlat[$k] = $item;
+    foreach (($item['children'] ?? []) as $ck => $ci) {
+        $navFlat[$ck] = $ci;
+        $navParents[$ck] = $k;
+    }
+}
+$navActiveKey = $navParents[$action] ?? $action;
 
 function formatBytes($b) {
     if ($b < 1024) return $b . 'B';
@@ -100,7 +135,7 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
 ?><!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>顺雅管理 · <?= $action === 'profile' ? '个人资料' : ($action === 'playlist-detail' ? '歌单详情' : htmlspecialchars($navItems[$action]['label'] ?? '')) ?></title>
+<title>顺雅管理 · <?= $action === 'profile' ? '个人资料' : ($action === 'playlist-detail' ? '歌单详情' : htmlspecialchars($navFlat[$action]['label'] ?? '')) ?></title>
 <?php $device = $isMobile ? 'mobile' : 'pc'; ?>
 <link rel="stylesheet" href="<?= asset_ver(str_replace('{device}', $device, $RELAY['page']['base_css'])) ?>">
 <?php $pageCssKey = $action . '_css'; if (isset($RELAY['page'][$pageCssKey])): ?>
@@ -126,7 +161,7 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
   <span class="topbar-title">顺雅管理</span>
   <nav class="topbar-nav" id="topbarNav">
 <?php foreach ($navItems as $k => $item): ?>
-    <a href="?action=<?= $k ?>" class="topbar-nav-item<?= $k === $action ? ' active' : '' ?>">
+    <a href="?action=<?= $k ?>" class="topbar-nav-item<?= $k === $navActiveKey ? ' active' : '' ?>">
       <span class="topbar-nav-icon"><?= $item['icon'] ?></span>
       <span class="topbar-nav-label"><?= $item['label'] ?></span>
     </a>
@@ -147,10 +182,28 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
   </div>
   <nav class="sidebar-nav" id="sidebarNav">
 <?php foreach ($navItems as $k => $item): ?>
-    <a href="?action=<?= $k ?>" class="sb-item<?= $k === $action ? ' active' : '' ?>">
+<?php if (!empty($item['children'])): $gOpen = ($navActiveKey === $k); $gChild = isset($item['children'][$action]); ?>
+    <div class="sb-group<?= $gOpen ? ' open' : '' ?><?= $gChild ? ' has-active' : '' ?>" data-group="<?= $k ?>">
+      <button type="button" class="sb-item sb-parent<?= $action === $k ? ' active' : '' ?>" data-toggle-group="<?= $k ?>" aria-expanded="<?= $gOpen ? 'true' : 'false' ?>">
+        <span class="sb-icon"><?= $item['icon'] ?></span>
+        <span class="sb-label"><?= $item['label'] ?></span>
+        <span class="sb-arrow"><?= svg('chev') ?></span>
+      </button>
+      <div class="sb-sub">
+<?php foreach ($item['children'] as $ck => $ci): ?>
+        <a href="?action=<?= $ck ?>" class="sb-sub-item<?= $ck === $action ? ' active' : '' ?>">
+          <span class="sb-icon"><?= $ci['icon'] ?></span>
+          <span class="sb-label"><?= $ci['label'] ?></span>
+        </a>
+<?php endforeach; ?>
+      </div>
+    </div>
+<?php else: ?>
+    <a href="?action=<?= $k ?>" class="sb-item<?= $k === $navActiveKey ? ' active' : '' ?>">
       <span class="sb-icon"><?= $item['icon'] ?></span>
       <span class="sb-label"><?= $item['label'] ?></span>
     </a>
+<?php endif; ?>
 <?php endforeach; ?>
   </nav>
   <div class="sidebar-footer">

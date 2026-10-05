@@ -1,0 +1,99 @@
+/* domains.css — 宿主域名授权页（桌面端）
+   配色约定同 base.css：默认亮色写 rgba(0,0,0,x)，[data-theme="dark"] 下覆盖成白色系。
+   注意桌面板 base.css 没有 .btn-sm svg 尺寸规则，图标必须在这里定尺寸，否则 svg 会按默认 300x150 撑开。 */
+
+/* 顶部提示 */
+.notice-line{display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.7;color:rgba(0,0,0,.45);margin:0 2px 14px}
+.notice-line svg{width:15px;height:15px;flex-shrink:0;opacity:.45}
+
+/* 表不存在时的红框 */
+.dom-alert{border:1px solid rgba(220,80,80,.35);background:rgba(220,80,80,.08);border-radius:12px;padding:14px 16px;margin-bottom:14px;line-height:1.7;color:rgba(0,0,0,.6)}
+.dom-alert strong{display:block;color:#c0392b;margin-bottom:2px}
+.dom-alert a{color:#c0392b}
+.dom-alert code{background:rgba(0,0,0,.05);border-radius:5px;padding:1px 5px;font-size:12px}
+.dom-alert-detail{margin-top:4px;font-size:12px;color:rgba(0,0,0,.45)}
+
+.dom-hint{font-size:12px;line-height:1.8;color:rgba(0,0,0,.45);padding:0 2px 2px}
+.dom-count{font-weight:400;font-size:12px;color:rgba(0,0,0,.35);margin-left:4px}
+
+/* 全局开关：表单内联，别被 card-header 的 flex 拉开 */
+.dom-switch-form{margin:0}
+.dom-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.dom-switch input{position:absolute;opacity:0;width:0;height:0}
+.dom-switch-track{width:38px;height:20px;border-radius:999px;background:rgba(0,0,0,.16);position:relative;transition:background .18s;flex:none}
+.dom-switch-dot{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .18s}
+.dom-switch input:checked + .dom-switch-track{background:var(--accent)}
+.dom-switch input:checked + .dom-switch-track .dom-switch-dot{left:20px}
+.dom-switch input:disabled + .dom-switch-track{opacity:.45}
+.dom-switch-text{font-size:12px;color:rgba(0,0,0,.45)}
+
+/* 新增 / 编辑表单 */
+.dom-form{margin-top:4px}
+.dom-form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 16px}
+.dom-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dom-field-wide{grid-column:span 2}
+.dom-field label{font-size:12px;color:rgba(0,0,0,.45)}
+.dom-field .form-input{padding:10px 12px;font-size:13.5px;border-radius:9px}
+.dom-field input[type=number].form-input{text-align:left}
+.dom-field-hint{font-size:11px;color:rgba(0,0,0,.32);line-height:1.6}
+.dom-form-foot{display:flex;align-items:center;gap:18px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,0,0,.05);flex-wrap:wrap}
+.dom-check{font-size:13px;color:rgba(0,0,0,.5);white-space:nowrap;padding:0}
+.dom-form-actions{margin-left:auto;display:flex;gap:8px}
+.btn-sm svg{width:14px;height:14px;flex-shrink:0}
+
+/* 域名列表 */
+.dom-table-wrap{overflow-x:auto;margin-top:4px}
+.dom-table{width:100%;border-collapse:collapse;font-size:13px}
+.dom-table th{text-align:left;font-weight:500;font-size:12px;color:rgba(0,0,0,.4);padding:8px 10px;border-bottom:1px solid rgba(0,0,0,.08);white-space:nowrap}
+.dom-table td{padding:10px;border-bottom:1px solid rgba(0,0,0,.05);vertical-align:middle;color:rgba(0,0,0,.6)}
+.dom-table tr:last-child td{border-bottom:0}
+.dom-host{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:rgba(0,0,0,.75);cursor:copy}
+.dom-num{font-variant-numeric:tabular-nums}
+.dom-follow{font-size:11px;color:rgba(0,0,0,.4);border:1px solid rgba(0,0,0,.12);border-radius:5px;padding:0 4px;margin-left:4px}
+.dom-none{color:rgba(0,0,0,.25)}
+.dom-cell-dim{color:rgba(0,0,0,.45)}
+.dom-cell-note{max-width:220px;color:rgba(0,0,0,.55);word-break:break-all}
+.dom-col-act{width:1%;white-space:nowrap}
+.dom-row-actions{display:flex;gap:8px;align-items:center}
+.dom-row-actions form{margin:0}
+
+/* 状态标签 */
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;white-space:nowrap}
+.tag-ok{background:rgba(52,199,89,.12);color:#1f9d4d;border:1px solid rgba(52,199,89,.3)}
+.tag-off{background:rgba(0,0,0,.05);color:rgba(0,0,0,.45);border:1px solid rgba(0,0,0,.1)}
+/* 自动登记徽标（配色约定同 .tag-ok / .tag-off：亮色 rgba(0,0,0,x)，暗色单独覆盖） */
+.tag-auto{background:rgba(14,159,176,.12);color:#0b7c8a;border:1px solid rgba(14,159,176,.3)}
+[data-theme="dark"] .tag-auto{background:rgba(77,227,224,.14);color:#7ff0ee;border-color:rgba(77,227,224,.32)}
+/* 顶部两个全局开关：一行两列，两张卡等高（高的一方决定行高） */
+.dom-switch-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;align-items:stretch}
+.dom-switch-grid .card{margin-bottom:0;min-width:0;height:100%}
+@media (max-width:900px){.dom-switch-grid{grid-template-columns:1fr}}
+
+/* 卡片式列表默认隐藏，窄屏由页面脚本切到 .dom-cards */
+.dom-cards{display:none}
+
+/* ===== 暗色主题 ===== */
+[data-theme="dark"] .notice-line{color:rgba(255,255,255,.55)}
+[data-theme="dark"] .notice-line svg{opacity:.5}
+[data-theme="dark"] .dom-alert{border-color:rgba(220,80,80,.45);background:rgba(220,80,80,.10);color:rgba(255,255,255,.75)}
+[data-theme="dark"] .dom-alert strong,[data-theme="dark"] .dom-alert a{color:#ff9b9b}
+[data-theme="dark"] .dom-alert code{background:rgba(255,255,255,.08)}
+[data-theme="dark"] .dom-alert-detail{color:rgba(255,255,255,.55)}
+[data-theme="dark"] .dom-hint{color:rgba(255,255,255,.55)}
+[data-theme="dark"] .dom-count{color:rgba(255,255,255,.45)}
+[data-theme="dark"] .dom-switch-track{background:rgba(255,255,255,.16)}
+[data-theme="dark"] .dom-switch-dot{box-shadow:none}
+[data-theme="dark"] .dom-switch-text{color:rgba(255,255,255,.6)}
+[data-theme="dark"] .dom-field label{color:rgba(255,255,255,.55)}
+[data-theme="dark"] .dom-field-hint{color:rgba(255,255,255,.38)}
+[data-theme="dark"] .dom-form-foot{border-top-color:rgba(255,255,255,.06)}
+[data-theme="dark"] .dom-check{color:rgba(255,255,255,.75)}
+[data-theme="dark"] .dom-table th{color:rgba(255,255,255,.5);border-bottom-color:rgba(255,255,255,.1)}
+[data-theme="dark"] .dom-table td{color:rgba(255,255,255,.7);border-bottom-color:rgba(255,255,255,.06)}
+[data-theme="dark"] .dom-host{color:#fff}
+[data-theme="dark"] .dom-follow{color:rgba(255,255,255,.4);border-color:rgba(255,255,255,.15)}
+[data-theme="dark"] .dom-none{color:rgba(255,255,255,.3)}
+[data-theme="dark"] .dom-cell-dim{color:rgba(255,255,255,.6)}
+[data-theme="dark"] .dom-cell-note{color:rgba(255,255,255,.7)}
+[data-theme="dark"] .tag-ok{background:rgba(90,200,120,.15);color:#7ddc9a;border-color:rgba(90,200,120,.3)}
+[data-theme="dark"] .tag-off{background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.15)}

@@ -369,9 +369,13 @@ _PHP_MODULES_
     }).then(function() {
         window.__mapiPlayer = MP;               // 兼容旧宿主页：指向最近加载完模块的实例
         if (!_bootAlive()) return;                      // 加载中途被卸载
-        MP.verifyKey(function(ok) {
+        MP.verifyKey(function(ok, code) {
             if (!_bootAlive()) return;
-            if (!ok) { MP._bootFailed = true; return; }   // 密钥无效/被限流：告知宿主页按钮可回到“加载”
+            if (!ok) {                                      // 密钥无效/停用/限流/连不上：按原因码各自提示
+                MP._bootFailed = true;
+                if (typeof MP.notice === 'function') MP.notice(code || 'server_error');
+                return;
+            }
             MP.showConsentBanner(function(consented) {
                 if (!_bootAlive()) return;
                 MP._cookieConsented = consented;
@@ -383,11 +387,13 @@ _PHP_MODULES_
                     _bootXhr.timeout = 20000;
                     _bootXhr.ontimeout = function() {
                         MP._bootFailed = true;                 // 配置请求超时：播放器无法启动
+                        if (typeof MP.notice === 'function') MP.notice('offline');
                         MP._loading = false;
                         if (typeof MP.$ === 'function') { var t2 = MP.$('toggle'); if (t2) t2.classList.remove('loading'); }
                     };
                     _bootXhr.onerror = function() {
                         MP._bootFailed = true;                 // 配置拉取失败：播放器无法启动
+                        if (typeof MP.notice === 'function') MP.notice('offline');
                         MP._loading = false;
                         if (typeof MP.$ === 'function') { var t0 = MP.$('toggle'); if (t0) t0.classList.remove('loading'); }
                     };
@@ -397,14 +403,27 @@ _PHP_MODULES_
                         var _hasPlaylist = false;
                         try {
                             var _d = JSON.parse(_bootXhr.responseText);
-                            if (_d.ok && _d.config) {
+                            if (_d.ok && _d.config && !(_d.config.domain && _d.config.domain.blocked)) {
                                 // 复用启动配置：避免播放器再发一次 get-config（单线程服务器上每个请求都会拖慢页面切换）
                                 window.__mszeph_config = _d.config;
                                 if (_d.config.playlists && _d.config.playlists.length) _hasPlaylist = true;
+                            } else if (_d.config && _d.config.domain && _d.config.domain.blocked) {
+                                MP._bootFailed = true;             // 域名未授权 / 密钥与域名不匹配：最容易被当成“配置坏了”
+                                if (typeof MP.notice === 'function') {
+                                    if (_d.config.domain.reason === 'key_domain') {
+                                        MP.notice('key_domain', { detail: '这条密钥只授权给 ' + (_d.config.domain.keyDomain || '它绑定的域名') });
+                                    } else {
+                                        MP.notice('domain_blocked');
+                                    }
+                                }
                             } else {
                                 MP._bootFailed = true;
+                                if (typeof MP.notice === 'function') MP.notice(_d.code || 'server_error');
                             }
-                        } catch(e) { MP._bootFailed = true; }
+                        } catch(e) {
+                            MP._bootFailed = true;
+                            if (typeof MP.notice === 'function') MP.notice('server_error');
+                        }
                         MP._hostRoot = MP.createWidget();
                         MP.root = MP._hostRoot;
                         MP.$ = function(id) { return MP._hostRoot ? MP._hostRoot.querySelector('[data-mp="' + id + '"]') : null; };
@@ -415,7 +434,9 @@ _PHP_MODULES_
                         }
                         if (!_hasPlaylist) {
                             MP._loading = false;
-                            MP._showNoPlaylistNotice();
+                            // 启动已经因为域名/密钥/网络失败时不再补一条“没有歌单”，
+                            // 否则会同时弹两条提示，把真正的原因挤到后面
+                            if (!MP._bootFailed) MP._showNoPlaylistNotice();
                             var loadingEl = MP.$('toggleLoading');
                             if (loadingEl) loadingEl.style.display = 'none';
                             var toggleBtn = MP.$('toggle');
@@ -446,6 +467,7 @@ _PHP_MODULES_
                             }).catch(function() {
                                 // APlayer 资源加载失败（CDN 不可达等）：清掉加载态，让按钮回到“加载”可重试
                                 MP._bootFailed = true;
+                                if (typeof MP.notice === 'function') MP.notice('cdn_failed');
                                 var t = MP.$('toggle');
                                 if (t) t.classList.remove('loading');
                                 MP._loading = false;

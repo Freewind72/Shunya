@@ -26,7 +26,8 @@ function rate_limit_check(string $prefix, int $max_requests, int $window_seconds
 
     if ($rlCount > $max_requests) {
         http_response_code(429);
-        die(json_encode(['error' => '请求过于频繁，请稍后再试']));
+        // code 供播放器端给出「请求太频繁」这条独立提示（而不是笼统的“密钥无效”）
+        die(json_encode(['error' => '请求过于频繁，请稍后再试', 'code' => 'rate_limited', 'http' => 429], JSON_UNESCAPED_UNICODE));
     }
 }
 

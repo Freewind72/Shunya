@@ -6,7 +6,7 @@
 <div class="bottom-nav" id="bottomNav">
   <div class="nav-pill" id="navPill"></div>
 <?php foreach ($navItems as $k => $item): ?>
-  <a href="?action=<?= $k ?>" class="nav-item<?= $k === $action ? ' active' : '' ?>"><?= $item['icon'] ?><span><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span></a>
+  <a href="?action=<?= $k ?>" class="nav-item<?= $k === $navActiveKey ? ' active' : '' ?>"><?= $item['icon'] ?><span><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span></a>
 <?php endforeach; ?>
 </div>
 <?php endif; ?>

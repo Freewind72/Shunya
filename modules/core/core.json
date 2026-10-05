@@ -2,5 +2,5 @@
   "name": "core",
   "version": "1.0.0",
   "apiVersion": 1,
-  "modules": ["auth.js", "state.js", "player.js", "ui.js", "lyrics.js", "theme.js"]
+  "modules": ["auth.js", "state.js", "player.js", "ui.js", "inset.js", "lyrics.js", "theme.js"]
 }

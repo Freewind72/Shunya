@@ -31,9 +31,9 @@ if ((($_SESSION['admin_is_admin'] ?? 99) > 1)) { echo '<div class="card"><div cl
         <input type="hidden" name="is_admin" value="<?= $u['is_admin'] == 0 ? 2 : ($u['is_admin'] == 1 ? 2 : 1) ?>">
         <button class="btn-sm"><?= $u['is_admin'] == 0 ? '取消超级管理' : ($u['is_admin'] == 1 ? '取消管理' : '设为管理') ?></button>
       </form>
-      <form method="post" action="?action=user-delete"><input type="hidden" name="_csrf" value="<?= csrf_token() ?>">
+      <form method="post" action="?action=user-delete" onsubmit="return showConfirm(event,this,'确认删除用户 <?= htmlspecialchars(addslashes($u['username']), ENT_QUOTES) ?>？')"><input type="hidden" name="_csrf" value="<?= csrf_token() ?>">
         <input type="hidden" name="id" value="<?= $u['id'] ?>">
-        <button class="btn-sm danger" onclick="if(!confirm('确认删除用户 <?= htmlspecialchars(addslashes($u['username']), ENT_QUOTES) ?>？'))return false;this.form.submit()">删除</button>
+        <button class="btn-sm danger">删除</button>
       </form>
     </div>
     <?php endif; ?>

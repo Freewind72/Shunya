@@ -194,3 +194,12 @@ input[type="radio"],input[type="checkbox"]{accent-color:var(--accent)}
 .u-card-border{border:1px solid var(--glass-bd)!important}
 .u-soft-bg{background:var(--glass-bg-2)!important}
 .u-input-border{border:1px solid var(--input-bd)!important}
+
+/* 侧边栏分组（主菜单 + 下拉子菜单） */
+.sb-parent{font-family:inherit}
+.sb-parent:hover{background:var(--glass-bg-2)!important;color:var(--ink)!important}
+.sb-group.has-active>.sb-parent{color:var(--ink)!important}
+.sb-arrow{color:var(--ink-soft)!important}
+.sb-sub-item{color:var(--ink-soft)!important;border-radius:var(--r-md)}
+.sb-sub-item:hover{background:var(--glass-bg-2)!important;color:var(--ink)!important}
+.sb-sub-item.active{background:var(--accent-soft)!important;color:var(--accent)!important;box-shadow:inset 2px 0 0 var(--accent-line)!important}

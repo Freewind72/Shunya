@@ -23,6 +23,8 @@ require __DIR__ . '/../../assets/lib/db.php';
 require __DIR__ . '/../../assets/lib/api_config.php';
 require __DIR__ . '/../../assets/lib/helpers.php';
 require __DIR__ . '/../lib/cover_cache.php';      // 封面统一存数据库
+if (!defined('MAPI_PLAYER_API')) define('MAPI_PLAYER_API', true);   // 放行 admin/lib/domains.php 的访问守卫
+require_once __DIR__ . '/../lib/domains.php';      // 域名授权 + 自动登记（与后台共用同一份数据层）
 
 rate_limit_check('api', 120, 60);
 
@@ -60,9 +62,9 @@ function auth_required(): string {
         $token = $m[1];
     }
     $token = $token ?: ($_GET['token'] ?? '');
-    if (!$token) { http_response_code(401); json_exit(['error' => '未授权，请提供 token', 'code' => 401]); }
+    if (!$token) { http_response_code(401); json_exit(['error' => '未授权，请提供 token', 'code' => 401, 'reason' => 'missing_token']); }
     $data = jwt_decode($token, $jwt_secret);
-    if (!$data || empty($data['key'])) { http_response_code(401); json_exit(['error' => 'token 无效或已过期', 'code' => 401]); }
+    if (!$data || empty($data['key'])) { http_response_code(401); json_exit(['error' => 'token 无效或已过期', 'code' => 401, 'reason' => 'invalid_token']); }
     $cookieSid = $_COOKIE['mapi_sid'] ?? '';
     $tokenSid  = $data['sid'] ?? '';
     if ($tokenSid && $cookieSid && hash_equals($tokenSid, $cookieSid)) {
@@ -338,7 +340,7 @@ switch ($action) {
         $input = json_decode(file_get_contents('php://input'), true);
         $k = $input['key'] ?? $_GET['key'] ?? '';
         $_current_api_key = $k;
-        if (!$k) json_exit(['valid' => false, 'msg' => 'missing key']);
+        if (!$k) json_exit(['valid' => false, 'code' => 'missing_key', 'msg' => 'missing key']);
         $sid = bin2hex(random_bytes(16));
         $ttl = 86400;
         if (!$db_log) {
@@ -351,7 +353,8 @@ switch ($action) {
         $stmt->execute();
         $r = $stmt->get_result();
         $row = $r ? $r->fetch_assoc() : null;
-        if (!$row) json_exit(['valid' => false, 'msg' => 'invalid key']);
+        // 失败再细分：行还在但 status=0 是「被停用」，和「密钥不存在」不是一回事
+        if (!$row) json_exit(['valid' => false, 'code' => key_fail_code($db_log, $k), 'msg' => 'invalid key']);
         $token = jwt_encode(['key' => $k, 'sid' => $sid, 'exp' => time() + $ttl, 'iat' => time()], $jwt_secret);
         setcookie('mapi_sid', $sid, ['expires' => time() + $ttl, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
         json_exit(['valid' => true, 'token' => $token, 'msg' => 'ok']);
@@ -373,7 +376,7 @@ switch ($action) {
             }
         }
         $_current_api_key = $k;
-        if (!$k) json_exit(['ok' => false, 'config' => null, 'msg' => 'missing key']);
+        if (!$k) json_exit(['ok' => false, 'config' => null, 'code' => 'missing_key', 'msg' => 'missing key']);
         $sourceCfg = [
             'base_url' => $apiBase,
             'params'   => ['server' => $rServer, 'type' => $rType, 'id' => $rId],
@@ -386,20 +389,22 @@ switch ($action) {
                 'source' => $sourceCfg,
             ]]);
         }
-        $keyStmt = $db_log->prepare("SELECT user_id, id FROM mapi_keys WHERE api_key=? AND status=1");
+        $keyStmt = $db_log->prepare("SELECT user_id, id, name, domain FROM mapi_keys WHERE api_key=? AND status=1");
         $keyStmt->bind_param('s', $k);
         $keyStmt->execute();
         $keyRes = $keyStmt->get_result();
         $keyRow = $keyRes->fetch_assoc();
-        if (!$keyRow) json_exit(['ok' => false, 'config' => null, 'msg' => 'invalid key']);
+        if (!$keyRow) json_exit(['ok' => false, 'config' => null, 'code' => key_fail_code($db_log, $k), 'msg' => 'invalid key']);
         $userId = (int)$keyRow['user_id'];
+        // 密钥自己的「授权域名」（创建密钥时填的）：非空时只有这一个主机名能用这条密钥
+        $keyDomain = strtolower(trim((string)($keyRow['domain'] ?? '')));
         $userStmt = $db_log->prepare("SELECT auto_theme, theme_mode, lyrics_default, autoplay_default FROM mapi_users WHERE id=?");
         $userStmt->bind_param('i', $userId);
         $userStmt->execute();
         $userRes = $userStmt->get_result();
         $userRow = $userRes->fetch_assoc();
         if (!$userRow) {
-            json_exit(['ok' => false, 'config' => null, 'msg' => '用户不存在']);
+            json_exit(['ok' => false, 'config' => null, 'code' => 'user_missing', 'msg' => '用户不存在']);
         }
         $autoTheme = $userRow ? (int)$userRow['auto_theme'] : 1;
         $themeMode = $userRow ? $userRow['theme_mode'] : 'light';
@@ -474,7 +479,69 @@ switch ($action) {
                 $playlists[] = $plItem;
             }
         }
-        json_exit(['ok' => true, 'config' => ['auto_theme' => $autoTheme, 'theme_mode' => $themeMode, 'lyrics_default' => $lyricsDefault, 'autoplay_default' => $autoplayDefault, 'player_pos' => $playerPos, 'playlists' => $playlists, 'source' => $sourceCfg]]);
+        // ═══ 宿主域名配置（底部 inset 探测 / 域名授权）═══
+        // 表不存在或没有匹配行时 $domainCfg 保持 null → 客户端走纯自动探测（与旧行为完全一致）。
+        // 全局开关：mapi_config.domain_authorize，缺省视为 0（一律放行，不拦任何站）。
+        $domainCfg = null;
+        try {
+            $hostSrc = '';
+            foreach (['HTTP_REFERER', 'HTTP_ORIGIN'] as $_hk) {
+                if (!empty($_SERVER[$_hk])) { $hostSrc = (string)$_SERVER[$_hk]; break; }
+            }
+            $host = $hostSrc !== '' ? (string)parse_url($hostSrc, PHP_URL_HOST) : '';
+            $host = strtolower(trim($host, ". \t\n\r\0\x0B"));
+            // 不做 www 合并：只认「填过的那个主机名」，主域名不会顺带授权它的子域名
+            if ($host !== '' && preg_match('/^[a-z0-9.-]+$/', $host)) {
+                if ($keyDomain !== '' && $host !== $keyDomain) {
+                    // 密钥绑定了授权域名，而当前主机名不是它 → 直接拦掉。
+                    // 也不再走下面的自动登记，免得给无关域名记一堆行。
+                    $domainCfg = [
+                        'host'         => $host,
+                        'authorized'   => false,
+                        'blocked'      => true,
+                        'auto'         => true,
+                        'lyricsBottom' => 0,
+                        'playerBottom' => 0,
+                        'reason'       => 'key_domain',
+                        'keyDomain'    => $keyDomain,
+                    ];
+                } else {
+                    $authorizeOn = false;
+                    $sw = $db_log->query("SELECT config_value FROM mapi_config WHERE config_key='domain_authorize'");
+                    if ($sw && is_object($sw)) { $swRow = $sw->fetch_assoc(); $authorizeOn = ((string)($swRow['config_value'] ?? '0')) === '1'; }
+                    $row = null;
+                    $dStmt = $db_log->prepare("SELECT domain, authorized, auto, lyrics_bottom, player_bottom FROM mapi_domains WHERE user_id=? AND domain=? LIMIT 1");
+                    if ($dStmt) {
+                        $dStmt->bind_param('is', $userId, $host);
+                        $dStmt->execute();
+                        $dRes = $dStmt->get_result();
+                        $row = $dRes ? $dRes->fetch_assoc() : null;
+                    }
+                    // 自动登记：mapi_config.domain_auto_add（缺省视为开）。主机名第一次加载播放器时
+                    // 直接写进 mapi_domains 并授权，免得换了域名 / 上了 CDN / 多了个 www 就被自己的开关挡住。
+                    // 已有行一律不动：管理员手动停用（authorized=0）的行不会被复活。
+                    if (!$row && $authorizeOn && domain_auto_add_on($db_log)) {
+                        $autoRow = domain_auto_register($db_log, $userId, $host);
+                        if ($autoRow) $row = $autoRow;
+                    }
+                    if ($row || $authorizeOn || $keyDomain !== '') {
+                        // 密钥绑定的域名命中主机名时直接算已授权（等于密钥自带一份授权）
+                        $authorized = $keyDomain !== '' ? true : ($row ? ((int)$row['authorized'] === 1) : false);
+                        $lyr = $row ? (int)$row['lyrics_bottom'] : 0;
+                        $plr = ($row && $row['player_bottom'] !== null) ? (int)$row['player_bottom'] : $lyr;
+                        $domainCfg = [
+                            'host'         => $host,
+                            'authorized'   => $authorized,
+                            'blocked'      => $authorizeOn && !$authorized,
+                            'auto'         => $row ? ((int)$row['auto'] === 1) : true,
+                            'lyricsBottom' => $lyr,
+                            'playerBottom' => $plr,
+                        ];
+                    }
+                }
+            }
+        } catch (Throwable $e) { $domainCfg = null; }
+        json_exit(['ok' => true, 'config' => ['auto_theme' => $autoTheme, 'theme_mode' => $themeMode, 'lyrics_default' => $lyricsDefault, 'autoplay_default' => $autoplayDefault, 'player_pos' => $playerPos, 'playlists' => $playlists, 'source' => $sourceCfg, 'domain' => $domainCfg]]);
 
     case 'get-announcement':
         $k = $_GET['key'] ?? '';
@@ -554,5 +621,21 @@ function json_exit(mixed $data): never {
 
 #[\NoReturn]
 function json_error(string $msg): never {
-    json_exit(['error' => $msg]);
+    json_exit(['error' => $msg, 'code' => 'server_error']);
+}
+
+// 密钥校验失败时细分原因：被停用（行还在、status≠1）还是根本不存在。
+// 播放器端据此提示「密钥已被停用」而不是笼统的「密钥无效」。
+function key_fail_code($db, string $k): string {
+    if (!$db || $k === '') return 'invalid_key';
+    try {
+        $st = $db->prepare("SELECT status FROM mapi_keys WHERE api_key=? LIMIT 1");
+        if (!$st) return 'invalid_key';
+        $st->bind_param('s', $k);
+        $st->execute();
+        $res = $st->get_result();
+        $row = $res ? $res->fetch_assoc() : null;
+        if ($row && (int)$row['status'] !== 1) return 'key_disabled';
+    } catch (Throwable $e) {}
+    return 'invalid_key';
 }

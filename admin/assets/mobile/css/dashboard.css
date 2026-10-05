@@ -17,7 +17,6 @@
 
 .log-list{max-height:360px;height:auto;overflow-y:auto;scrollbar-width:none;transition:max-height .45s cubic-bezier(.4,0,.2,1)}
 .log-list::-webkit-scrollbar{display:none}
-.card.debug-expanded .log-list{max-height:calc(100vh - 280px)}
 .log-item{padding:10px 0;border-bottom:1px solid rgba(0,0,0,.04)}
 .log-item:last-child{border-bottom:none}
 .log-row{display:flex;flex-direction:column;gap:4px}
@@ -25,8 +24,6 @@
 .log-ip{font-family:'SF Mono',monospace;font-size:12px;font-weight:600;color:rgba(0,0,0,.55)}
 .log-key{font-family:'SF Mono',monospace;font-size:10px;color:rgba(0,0,0,.35);white-space:nowrap}
 .log-ref{font-size:11px;color:rgba(0,0,0,.3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-.card.debug-expanded{border-color:rgba(46,204,113,.35);box-shadow:0 0 30px rgba(46,204,113,.08);transition:border-color .45s,box-shadow .45s}
 
 [data-theme="dark"] .stat-item{background:rgba(40,40,55,.7);border-color:rgba(255,255,255,.06)}
 [data-theme="dark"] .stat-num{color:#e0e0e8}
@@ -42,4 +39,3 @@
 [data-theme="dark"] .log-time{color:rgba(255,255,255,.3)}
 [data-theme="dark"] .log-ip{color:rgba(255,255,255,.55)}
 [data-theme="dark"] .log-key{color:rgba(255,255,255,.35)}
-[data-theme="dark"] .card.debug-expanded{border-color:rgba(46,204,113,.25);box-shadow:0 0 40px rgba(46,204,113,.1)}

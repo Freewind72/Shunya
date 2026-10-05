@@ -27,8 +27,8 @@ if (empty($_SESSION['admin_id'])) {
 // action 校验
 $action = in_array($action, $allowed) ? $action : 'dashboard';
 
-// 非管理员禁止访问用户管理和设置页
-if ((($_SESSION['admin_is_admin'] ?? 99) > 1) && in_array($action, ['users','settings'])) {
+// 非管理员禁止访问用户管理和设置页（名单见 includes/routes.php 的 $adminOnlyActions）
+if ((($_SESSION['admin_is_admin'] ?? 99) > 1) && in_array($action, $adminOnlyActions, true)) {
     $action = 'dashboard';
 }
 

@@ -353,3 +353,39 @@ select.form-input::-ms-expand{display:none}
 .data-grid-2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .data-grid-2>.data-item,.data-grid-2>.user-item{margin-bottom:0}
 @media (max-width:1100px){.cards-grid{grid-template-columns:1fr}}
+/* 侧边栏分组：主菜单 + 下拉子菜单（设置） */
+.sb-group{display:flex;flex-direction:column;gap:2px}
+.sb-parent{width:100%;border:0;background:transparent;font:inherit;font-size:13px;font-weight:600;text-align:left;font-family:inherit;cursor:pointer}
+.sb-arrow{display:flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:auto;flex-shrink:0;opacity:.5;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+.sb-arrow svg{width:14px;height:14px}
+.sb-group.open .sb-arrow{transform:rotate(90deg)}
+/* 高度用 max-height 过渡（display 不能过渡），无竖分割线；透明交给子项自己做，
+   收起时高度延后 .16s 再收，保证「还没淡出的子项」不会被容器裁掉 */
+.sb-sub{display:flex;flex-direction:column;gap:2px;margin:0 0 0 19px;max-height:0;overflow:hidden;transition:max-height .28s cubic-bezier(.4,0,.2,1) .16s,margin .28s cubic-bezier(.4,0,.2,1) .16s}
+.sb-group.open .sb-sub{max-height:280px;margin:4px 0 2px 19px;transition:max-height .3s cubic-bezier(.4,0,.2,1),margin .3s cubic-bezier(.4,0,.2,1)}
+/* 收起态：靠下 6px + 轻微缩小 + 透明 */
+.sb-sub-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;font-size:12.5px;font-weight:600;color:rgba(0,0,0,.38);text-decoration:none;white-space:nowrap;opacity:0;transform:translateY(6px) scale(.97);transition:background .18s,color .18s,opacity .16s ease,transform .18s ease}
+/* 收回：从下往上逐个淡出，每项错峰 40ms（第 5 项先走）；这组不带 .open，只在收起时生效 */
+.sb-sub-item:nth-child(5){transition-delay:0s}
+.sb-sub-item:nth-child(4){transition-delay:.04s}
+.sb-sub-item:nth-child(3){transition-delay:.08s}
+.sb-sub-item:nth-child(2){transition-delay:.12s}
+.sb-sub-item:nth-child(1){transition-delay:.16s}
+/* 展开：从上往下逐个浮出，每项错峰 60ms（这组带 .open，优先级高于上面的收起延迟） */
+.sb-group.open .sb-sub-item{opacity:1;transform:none;transition:background .18s,color .18s,opacity .34s cubic-bezier(.22,1,.36,1),transform .36s cubic-bezier(.22,1,.36,1)}
+.sb-group.open .sb-sub-item:nth-child(1){transition-delay:.05s}
+.sb-group.open .sb-sub-item:nth-child(2){transition-delay:.11s}
+.sb-group.open .sb-sub-item:nth-child(3){transition-delay:.17s}
+.sb-group.open .sb-sub-item:nth-child(4){transition-delay:.23s}
+.sb-group.open .sb-sub-item:nth-child(5){transition-delay:.29s}
+@media (prefers-reduced-motion:reduce){.sb-sub,.sb-sub-item,.sb-arrow{transition:none!important}}
+.sb-sub-item:hover{background:rgba(0,0,0,.04);color:rgba(0,0,0,.55)}
+.sb-sub-item.active{background:rgba(0,0,0,.06);color:rgba(0,0,0,.72)}
+.sb-sub-item .sb-icon{width:18px;height:18px}
+.sb-sub-item .sb-icon svg{width:16px;height:16px}
+[data-theme="dark"] .sb-sub-item{color:rgba(255,255,255,.36)}
+[data-theme="dark"] .sb-sub-item:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.6)}
+[data-theme="dark"] .sb-sub-item.active{background:rgba(255,255,255,.08);color:rgba(255,255,255,.78)}
+.sidebar.collapsed .sb-sub,.sidebar.collapsed .sb-arrow{display:none!important}
+.sb-group.has-active>.sb-parent{color:rgba(0,0,0,.62)}
+[data-theme="dark"] .sb-group.has-active>.sb-parent{color:rgba(255,255,255,.72)}

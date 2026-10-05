@@ -108,16 +108,33 @@
                         var pls = (data.config.playlists || []).map(function(p){ p.type = p.type || 'playlist'; return p; });
                         if (pls && pls.length) { MP.playlists = pls; MP.loadInitialPlaylist(); }
                         else { MP._showNoPlaylistNotice(); }
+                    } else if (data && data.config && data.config.domain && data.config.domain.blocked) {
+                        MP._bootFailed = true;
+                        if (typeof MP.notice === 'function') {
+                            if (data.config.domain.reason === 'key_domain') {
+                                MP.notice('key_domain', { detail: '这条密钥只授权给 ' + (data.config.domain.keyDomain || '它绑定的域名') });
+                            } else {
+                                MP.notice('domain_blocked');
+                            }
+                        }
+                    } else {
+                        MP._bootFailed = true;
+                        if (typeof MP.notice === 'function') MP.notice((data && data.code) || 'server_error');
                     }
-                } catch(e) {}
+                } catch(e) {
+                    MP._bootFailed = true;
+                    if (typeof MP.notice === 'function') MP.notice('server_error');
+                }
             };
             xhr.ontimeout = function() {
                 if (MP._destroyed) return;
                 MP._bootFailed = true;
+                if (typeof MP.notice === 'function') MP.notice('offline');
             };
             xhr.onerror = function() {
                 if (MP._destroyed) return;
                 MP._bootFailed = true;
+                if (typeof MP.notice === 'function') MP.notice('offline');
             };
             MP._configXhr = xhr;
             xhr.send();
@@ -682,6 +699,12 @@
                 MP.renderSonglist();
                 var t = MP.$('ttl');
                 if (t) t.textContent = '\u6682\u65e0\u6b4c\u66f2';
+                // 所有歌单都试过了还是没有歌：区分“接口/网络失败”和“歌单本来就是空的”
+                if (!MP.songs.length && typeof MP.notice === 'function') {
+                    var anyFailed = false;
+                    for (var fk in MP._loadFailed) { if (MP._loadFailed[fk]) { anyFailed = true; break; } }
+                    MP.notice(anyFailed ? 'playlist_failed' : 'no_songs');
+                }
                 return;
             }            var idx = order[pos++];
             MP.loadPlaylistSongs(idx).then(function(list){
@@ -1193,6 +1216,7 @@
         if (apCss) apCss.remove();
         if (MP._toastEl && MP._toastEl.parentNode) MP._toastEl.parentNode.removeChild(MP._toastEl);
         MP._toastEl = null;
+        if (typeof MP._noticeCleanup === 'function') MP._noticeCleanup();
         if ('mediaSession' in navigator) {
             try { navigator.mediaSession.metadata = null; } catch(e) {}
         }

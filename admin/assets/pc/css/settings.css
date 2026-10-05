@@ -55,3 +55,18 @@
 [data-theme="dark"] .tpl-modal-body .form-input{background:rgba(255,255,255,.06);color:rgba(255,255,255,.78);border-color:rgba(255,255,255,.08)}
 [data-theme="dark"] .tpl-modal-close{color:rgba(255,255,255,.4)}
 [data-theme="dark"] .tpl-modal-close:hover{color:rgba(255,255,255,.72);background:rgba(255,255,255,.06)}
+/* 设置入口列表（移动端从底栏进入「设置」时的导航页） */
+.set-hub{display:flex;flex-direction:column;gap:8px}
+.set-hub-item{display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:12px;text-decoration:none;background:rgba(0,0,0,.03);border:1px solid rgba(0,0,0,.05);color:rgba(0,0,0,.6);font-size:14px;font-weight:600;transition:all .18s}
+.set-hub-item:hover{background:rgba(0,0,0,.06);color:rgba(0,0,0,.78)}
+.set-hub-icon{display:flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0;opacity:.6}
+.set-hub-icon svg{width:19px;height:19px}
+.set-hub-text{flex:1}
+.set-hub-chev{opacity:.3;font-size:19px;line-height:1}
+[data-theme="dark"] .set-hub-item{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.07);color:rgba(255,255,255,.62)}
+[data-theme="dark"] .set-hub-item:hover{background:rgba(255,255,255,.09);color:rgba(255,255,255,.85)}
+
+/* 设置子页面统一单列：一行一个卡片（忽略 .cards-grid 两列栅格与行内 grid-row/column） */
+.cards-grid{grid-template-columns:1fr!important}
+.cards-grid>*{grid-row:auto!important;grid-column:auto!important}
+.tpl-list-grid{grid-template-columns:1fr!important}

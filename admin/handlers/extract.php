@@ -26,8 +26,8 @@ $domainMap = [
     'profile.php'     => ['profile'],
     'config_user.php' => ['config'],
     'passkeys.php'    => ['pk-begin','pk-complete','pk-delete'],
-    'settings.php'    => ['settings'],
-    'system.php'      => ['debug-toggle','clear-logs'],
+    'settings.php'    => ['settings','settings-site','settings-mail','settings-security','settings-api','settings-storage'],
+    'system.php'      => ['clear-logs'],
 ];
 
 $actionToFile = [];

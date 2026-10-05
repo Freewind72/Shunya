@@ -102,7 +102,7 @@ function deleteTemplate(id){
   var csrfEl=document.querySelector('input[name="_csrf"]');
   var fd=new FormData();fd.append('_mail_tpl_delete','1');fd.append('_mail_tpl_id',id);
   if(csrfEl)fd.append('_csrf',csrfEl.value);
-  fetch('?action=settings',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}})
+  fetch('?action=settings-mail',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}})
     .then(function(r){return r.json()})
     .then(function(res){
       if(res.ok){
@@ -124,7 +124,7 @@ function setDefaultTemplate(id){
   var csrfEl=document.querySelector('input[name="_csrf"]');
   var fd=new FormData();fd.append('_mail_tpl_default','1');fd.append('_mail_tpl_id',id);
   if(csrfEl)fd.append('_csrf',csrfEl.value);
-  fetch('?action=settings',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}})
+  fetch('?action=settings-mail',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}})
     .then(function(r){return r.json()})
     .then(function(res){
       if(res.ok){

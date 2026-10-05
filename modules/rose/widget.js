@@ -343,7 +343,7 @@ MP._css = ''
   + '.rs-play svg{width:15px;height:15px}'
   + '.rs-chev{width:22px;height:50px}'
   // 移动端：底部上浮抽屉（不是居中弹窗）。高度仍固定，与曲目数量无关。
-  + '.rs-modal{left:0;right:0;bottom:0;top:auto;transform:none;width:100%;height:46vh;max-height:none;'
+  + '.rs-modal{left:0;right:0;bottom:var(--mapi-inset-player,0px);top:auto;transform:none;width:100%;height:46vh;max-height:none;'
     + 'border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom,0)}'
   // 顶部拖拽把手（视觉上暗示“可以拖”，也是拖拽热区的一部分）
   + '.rs-modal-hd{position:relative;padding-top:16px;touch-action:none}'

@@ -211,6 +211,10 @@ class DB_MysqlStmt {
     public function execute() {
         $ok = $this->stmt->execute();
         if (!$ok) $this->db->error = $this->stmt->error;
+        // 回写受影响行数与自增 id（与 DB_SqliteStmt::execute 保持一致）：
+        // DB_Mysql::$insert_id 是已声明的公共属性，__get 不会触发，不回写则恒为 0
+        $this->db->affected_rows = $this->stmt->affected_rows;
+        $this->db->insert_id = $this->stmt->insert_id;
         return $ok;
     }
 

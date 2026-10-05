@@ -1,18 +1,30 @@
-﻿var _toast=document.getElementById('toast'),_tt=null;
+var _toast=document.getElementById('toast'),_tt=null;
 function showToast(m,t){_toast.textContent=m;_toast.className='show '+(t||'ok');clearTimeout(_tt);_tt=setTimeout(function(){_toast.className=''},2500)}
-function showConfirm(e,f,m){e.preventDefault();if(!confirm(m))return false;f.submit();return false}
+// 确认框：确认后用 requestSubmit 重新触发 submit 事件，交给下面的 AJAX 提交拦截。
+// （直接 f.submit() 不触发 submit 事件 → 浏览器整页 POST → 页内测试播放器会被刷掉）
+function showConfirm(e,f,m){
+  if(f&&f.dataset&&f.dataset.confirmed==='1'){delete f.dataset.confirmed;return true}   // 第二次进来放行
+  e.preventDefault();
+  if(!confirm(m))return false;
+  if(f&&f.dataset)f.dataset.confirmed='1';
+  if(f.requestSubmit)f.requestSubmit();else f.submit();
+  return false;
+}
 
 var _navigating=false,_navAbort=null,_navTimer=null;
 (function(){
 history.scrollRestoration='manual';
-var navActions=['dashboard','keys','users','config','settings','profile','playlist-detail'];
+var navActions=['dashboard','keys','users','config','domains','settings','settings-site','settings-mail','settings-security','settings-api','settings-storage','profile','playlist-detail'];
 
+// 子菜单 → 父菜单映射（手机没有下拉菜单，底栏高亮停在「设置」上）
+var navParents={'settings-site':'settings','settings-mail':'settings','settings-security':'settings','settings-api':'settings','settings-storage':'settings'};
 function setActiveNav(action){
+  var key=navParents[action]||action;
   document.querySelectorAll('.topbar-nav-item').forEach(function(el){
-    el.classList.toggle('active',el.getAttribute('href')==='?action='+action);
+    el.classList.toggle('active',el.getAttribute('href')==='?action='+key);
   });
   document.querySelectorAll('.bottom-nav .nav-item').forEach(function(el){
-    el.classList.toggle('active',el.getAttribute('href')==='?action='+action);
+    el.classList.toggle('active',el.getAttribute('href')==='?action='+key);
   });
   positionNavPill();
 }

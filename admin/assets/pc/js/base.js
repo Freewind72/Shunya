@@ -1,17 +1,72 @@
-﻿var _toast=document.getElementById('toast'),_tt=null;
+var _toast=document.getElementById('toast'),_tt=null;
 function showToast(m,t){_toast.textContent=m;_toast.className='show '+(t||'ok');clearTimeout(_tt);_tt=setTimeout(function(){_toast.className=''},2500)}
-function showConfirm(e,f,m){e.preventDefault();if(!confirm(m))return false;f.submit();return false}
+// 确认框：确认后用 requestSubmit 重新触发 submit 事件，交给下面的 AJAX 提交拦截。
+// （直接 f.submit() 不触发 submit 事件 → 浏览器整页 POST → 页内测试播放器会被刷掉）
+function showConfirm(e,f,m){
+  if(f&&f.dataset&&f.dataset.confirmed==='1'){delete f.dataset.confirmed;return true}   // 第二次进来放行
+  e.preventDefault();
+  if(!confirm(m))return false;
+  if(f&&f.dataset)f.dataset.confirmed='1';
+  if(f.requestSubmit)f.requestSubmit();else f.submit();
+  return false;
+}
 
 var _navigating=false,_navAbort=null,_navTimer=null;
 (function(){
 history.scrollRestoration='manual';
-var navActions=['dashboard','keys','users','config','settings','profile','playlist-detail'];
+var navActions=['dashboard','keys','users','config','domains','settings','settings-site','settings-mail','settings-security','settings-api','settings-storage','profile','playlist-detail'];
+
+// 子菜单 → 父菜单映射：子项激活时父菜单高亮、底栏水珠停在父项上
+var navParents={'settings-site':'settings','settings-mail':'settings','settings-security':'settings','settings-api':'settings','settings-storage':'settings'};
+function navKeyOf(action){return navParents[action]||action}
+
+function setGroupOpen(open,save){
+  var grp=document.querySelector('.sidebar .sb-group');
+  if(!grp)return;
+  grp.classList.toggle('open',!!open);
+  var btn=grp.querySelector('.sb-parent');
+  if(btn)btn.setAttribute('aria-expanded',open?'true':'false');
+  if(save){try{localStorage.setItem('sb_group_open',open?'1':'0')}catch(e){}}
+}
 
 function setActiveNav(action){
+  var key=navKeyOf(action);
   document.querySelectorAll('.sidebar .sb-item').forEach(function(el){
+    var href=el.getAttribute('href');
+    el.classList.toggle('active',!!href&&href==='?action='+key);
+  });
+  var grp=document.querySelector('.sidebar .sb-group');
+  if(!grp)return;
+  var child=grp.querySelector('.sb-sub-item[href="?action='+action+'"]');
+  grp.querySelectorAll('.sb-sub-item').forEach(function(el){
     el.classList.toggle('active',el.getAttribute('href')==='?action='+action);
   });
+  if(child)setGroupOpen(true);
+  grp.classList.toggle('has-active',!!child);
 }
+
+// 分组默认收起（记住上次选择）；当前页在分组内则自动展开；折叠态下点父菜单先展开侧栏
+function initSidebarGroup(){
+  var grp=document.querySelector('.sidebar .sb-group');
+  if(!grp)return;
+  var stored=null;try{stored=localStorage.getItem('sb_group_open')}catch(e){}
+  setGroupOpen(!!grp.querySelector('.sb-sub-item.active')||stored==='1',false);
+  var btn=grp.querySelector('.sb-parent');
+  if(!btn)return;
+  btn.addEventListener('click',function(e){
+    e.preventDefault();e.stopPropagation();
+    var sbEl=document.getElementById('sidebar');
+    if(sbEl&&sbEl.classList.contains('collapsed')){
+      sbEl.classList.remove('collapsed');
+      try{localStorage.setItem('sidebar_collapsed','0')}catch(err){}
+      var brand=document.getElementById('sbBrand');
+      if(brand){brand.setAttribute('title','折叠侧边栏');brand.setAttribute('aria-label','折叠侧边栏')}
+      setGroupOpen(true,true);return;
+    }
+    setGroupOpen(!grp.classList.contains('open'),true);
+  });
+}
+initSidebarGroup();
 
 // 页面样式原子切换: 新样式就绪后才替换旧样式, 避免"CSS 丢失 / 无样式"的中间态.
 function swapPageCss(href,proceed){

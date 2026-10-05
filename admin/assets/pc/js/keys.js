@@ -148,3 +148,61 @@ function updateTestPlayerButtons(){
   updateTestPlayerButtons();
   watchPlayerBoot();
 })();
+
+// ═══ 创建密钥弹窗（名称必填 + 授权域名）═══
+// 用公共层的 .song-modal（样式在 base.css，与歌单/配置页弹窗同一套），交互照 config.js 的约定：
+// 挪到 body 下（fixed 定位才盖得住侧栏 / 不受页面容器影响）→ 打开切 display=flex → 关闭走 closing 类 + animationend。
+(function bindCreateKeyModal(){
+  if(window.__keyModalClickBound)return;
+  window.__keyModalClickBound=1;
+  // 委托挂在 document 上：软切换只换 .wrap 内容（弹窗 DOM 会整份换新），绑在旧节点上的监听会一起失效
+  document.addEventListener('click',function(e){
+    var m=document.getElementById('createKeyModal');
+    if(!m||m.style.display==='none')return;
+    var t=e.target;
+    if(!t||!m.contains(t)||!t.closest)return;
+    if(t.closest('.song-modal-backdrop')||t.closest('.song-modal-close'))closeCreateKeyModal();
+  });
+})();
+function openCreateKeyModal(){
+  var m=document.getElementById('createKeyModal');
+  if(!m)return;
+  if(m.parentElement!==document.body)document.body.appendChild(m);  // 软切换后弹窗会随新页面 DOM 回到 .wrap 里
+  m.style.display='flex';
+  var i=document.getElementById('createKeyName');
+  if(i)setTimeout(function(){try{i.focus()}catch(e){}},30);
+}
+function closeCreateKeyModal(){
+  var m=document.getElementById('createKeyModal');
+  if(!m||m.style.display==='none'||m.classList.contains('closing'))return;
+  m.classList.add('closing');
+  var done=function(){ m.classList.remove('closing'); m.style.display='none'; };
+  m.addEventListener('animationend',function onEnd(){ m.removeEventListener('animationend',onEnd); done(); });
+  setTimeout(function(){ if(m.classList.contains('closing'))done(); },400);
+}
+// 名称前端也拦一道（服务端同样会校验）；顺便做去空格/小写与防重复提交
+function handleCreateKeySubmit(e){
+  var nm=document.getElementById('createKeyName');
+  if(nm&&!String(nm.value||'').replace(/\s/g,'')){
+    e.preventDefault(); showToast('请先填写密钥名称','err');
+    try{nm.focus()}catch(err){}
+    return false;
+  }
+  var dm=document.getElementById('createKeyDomain');
+  if(dm){ dm.value=String(dm.value||'').trim().toLowerCase(); }
+  var btn=document.querySelector('#createKeyForm [type="submit"]');
+  if(btn){
+    if(btn.disabled){ e.preventDefault(); return false; }
+    btn.disabled=true; btn.textContent='创建中…';
+  }
+  return true;
+}
+if(!window.__keyEscBound){window.__keyEscBound=1;document.addEventListener('keydown',function(e){if(e.key==='Escape')closeCreateKeyModal()});}
+// 服务端校验失败会带着 ?create=1 回来 → 自动把弹窗重新打开
+(function(){
+  try{
+    if(!/[?&]create=1(&|$)/.test(location.search))return;
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',openCreateKeyModal);
+    else openCreateKeyModal();
+  }catch(e){}
+})();

@@ -48,13 +48,100 @@
         if (tog) tog.style.transform = '';
     };
 
-    MP._showNoPlaylistNotice = function() {
-        var el = document.createElement('div');
-        el.textContent = '\u8bf7\u5728\u540e\u53f0\u914d\u7f6e\u6b4c\u5355';
-        el.style.cssText = 'position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:2147483647;padding:8px 14px;border-radius:6px;font-size:12px;background:rgba(255,193,7,.12);color:#f39c12;border:1px solid rgba(255,193,7,.25);backdrop-filter:blur(12px);pointer-events:none;white-space:nowrap';
-        document.body.appendChild(el);
-        setTimeout(function(){el.style.transition='opacity .4s';el.style.opacity='0';setTimeout(function(){el.remove()},400)},5000);
+    // ═══ 统一提示：嵌在宿主页里的浮层，样式自带（不依赖宿主 CSS / 主题） ═══
+    // 起因：以前只有「缺 key」「后台没配歌单」两条文案，而且所有失败都往后者上靠 ——
+    // 密钥失效、限流、服务器不可达、域名未授权、CDN 挂了，要么完全静默，要么说错话。
+    // 现在按「原因码」给每种失败一条独立文案，统一渲染、同码去重、点一下可关掉。
+    MP._noticeDefs = {
+        no_key:          { level: 'error', title: '缺少 API Key',       detail: '嵌入代码里的 key 没填或为空' },
+        invalid_key:     { level: 'error', title: '密钥无效',           detail: '这个密钥不存在，或已被删除' },
+        key_disabled:    { level: 'error', title: '密钥已被停用',       detail: '到后台「密钥」页把它重新启用' },
+        rate_limited:    { level: 'warn',  title: '请求太频繁',         detail: '限流保护已触发，等一分钟再刷新' },
+        offline:         { level: 'error', title: '连不上服务器',       detail: '网络或服务不可达，检查后刷新页面' },
+        server_error:    { level: 'error', title: '服务器返回异常',     detail: '稍后重试，或到后台看看接口日志' },
+        domain_blocked:  { level: 'error', title: '这个域名没有授权',   detail: '到后台「域名」页添加它，或打开「自动添加检测到的域名」' },
+        key_domain:      { level: 'error', title: '这个密钥不能在这里使用', detail: '这条密钥绑定了授权域名，请换用对应域名的密钥' },
+        no_playlist:     { level: 'warn',  title: '后台还没有歌单',     detail: '到后台「配置」页添加歌单后刷新' },
+        no_songs:        { level: 'warn',  title: '没有可播放的歌曲',   detail: '歌单是空的，或接口没返回数据' },
+        playlist_failed: { level: 'warn',  title: '歌单加载失败',       detail: '点悬浮按钮重试，或检查后台的接口配置' },
+        cdn_failed:      { level: 'error', title: '播放器资源加载失败', detail: 'CDN 不可达，刷新页面重试' },
     };
+    MP._noticeColors = {
+        error: { bg: 'rgba(229,72,77,.13)',  bd: 'rgba(229,72,77,.34)',  fg: '#e5484d' },
+        warn:  { bg: 'rgba(243,156,18,.13)', bd: 'rgba(243,156,18,.34)', fg: '#e08b06' },
+        info:  { bg: 'rgba(108,92,231,.13)', bd: 'rgba(108,92,231,.34)', fg: '#6c5ce7' },
+    };
+    MP._noticeIcons = {
+        error: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.6v5.4M12 16.3v.3"/></svg>',
+        warn:  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3.7 2.9 19.3h18.2z"/><path d="M12 9.6v4.1M12 16.5v.3"/></svg>',
+        info:  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.2v5.3M12 7.7v.3"/></svg>',
+    };
+
+    MP._noticeHost = function() {
+        var host = document.getElementById('mapi-notices');
+        if (host) return host;
+        host = document.createElement('div');
+        host.id = 'mapi-notices';
+        host.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:calc(100vw - 24px);pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif';
+        (document.body || document.documentElement).appendChild(host);
+        return host;
+    };
+
+    MP._noticeTimeout = function(level) {
+        return level === 'error' ? 9000 : (level === 'warn' ? 6000 : 4000);
+    };
+
+    MP._noticeDismiss = function(el) {
+        if (!el) return;
+        clearTimeout(el._mapiTimer);
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-8px)';
+        setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+    };
+
+    // MP.notice('invalid_key') ；未知码也可以直接传文案：MP.notice('自定义文案', {level:'info'})
+    MP.notice = function(code, opts) {
+        if (!code) return null;
+        var def = MP._noticeDefs[code] || { level: (opts && opts.level) || 'info', title: String(code), detail: (opts && opts.detail) || '' };
+        var level = (opts && opts.level) || def.level || 'info';
+        var c = MP._noticeColors[level] || MP._noticeColors.info;
+        var host = MP._noticeHost();
+
+        // 同码去重：已经在显示就只闪一下并续命，不叠罗汉
+        var exist = host.querySelector('[data-notice="' + code + '"]');
+        if (exist) {
+            clearTimeout(exist._mapiTimer);
+            exist.style.transform = 'translateY(0) scale(1.03)';
+            setTimeout(function(){ exist.style.transform = 'translateY(0) scale(1)'; }, 160);
+            exist._mapiTimer = setTimeout(function(){ MP._noticeDismiss(exist); }, MP._noticeTimeout(level));
+            return exist;
+        }
+        while (host.children.length >= 3) MP._noticeDismiss(host.firstChild);   // 最多同时 3 条
+
+        var el = document.createElement('div');
+        el.setAttribute('data-notice', code);
+        el.style.cssText = 'pointer-events:auto;cursor:pointer;box-sizing:border-box;display:flex;align-items:flex-start;gap:8px;max-width:420px;padding:9px 12px;border-radius:11px;background:' + c.bg + ';border:1px solid ' + c.bd + ';color:' + c.fg + ';backdrop-filter:blur(14px)saturate(180%);-webkit-backdrop-filter:blur(14px)saturate(180%);box-shadow:0 6px 24px rgba(0,0,0,.14);opacity:0;transform:translateY(-8px);transition:opacity .26s cubic-bezier(.4,0,.2,1),transform .26s cubic-bezier(.4,0,.2,1)';
+        el.innerHTML = '<span style="flex:0 0 auto;display:flex;margin-top:1px">' + (MP._noticeIcons[level] || MP._noticeIcons.info) + '</span>'
+            + '<span style="min-width:0">'
+            + '<span style="display:block;font-size:13px;font-weight:700;line-height:1.45;word-break:break-word">' + _.escapeHtml(def.title) + '</span>'
+            + (def.detail ? '<span style="display:block;font-size:12px;line-height:1.55;margin-top:2px;opacity:.85;word-break:break-word">' + _.escapeHtml(def.detail) + '</span>' : '')
+            + '</span>';
+        el.addEventListener('click', function(){ MP._noticeDismiss(el); });
+        host.appendChild(el);
+        void el.offsetWidth;
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+        el._mapiTimer = setTimeout(function(){ MP._noticeDismiss(el); }, MP._noticeTimeout(level));
+        return el;
+    };
+
+    // 卸载播放器时清掉提示，宿主页面上不留残影
+    MP._noticeCleanup = function() {
+        var host = document.getElementById('mapi-notices');
+        if (host && host.parentNode) host.parentNode.removeChild(host);
+    };
+
+    MP._showNoPlaylistNotice = function() { MP.notice('no_playlist'); };
 
     MP.applyMarquee = function(el, text) {
         if (!el) return;

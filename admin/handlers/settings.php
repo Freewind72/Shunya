@@ -2,7 +2,7 @@
 
 // $action_key 由路由层传入，值为实际的action名
 
-if ($action_key === 'settings') {
+if (in_array($action_key, ['settings','settings-site','settings-mail','settings-security','settings-api','settings-storage'], true)) {
     csrf_require();
     if (isset($_POST['_geetest_submit'])) {
         $geetestCaptchaId = trim($_POST['geetest_captcha_id'] ?? '');
@@ -184,9 +184,9 @@ if ($action_key === 'settings') {
         }
         // 非 AJAX 则重定向
         if (!(isset($_POST['_mail_tpl_save']) || isset($_POST['_mail_tpl_delete']) || isset($_POST['_mail_tpl_default']))) {
-            header('Location: ?action=settings'); exit;
+            header('Location: ?action=' . $action_key); exit;
         }
         exit;
     }
-    header('Location: ?action=settings'); exit;
+    header('Location: ?action=' . $action_key); exit;
 }

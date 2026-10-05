@@ -13,7 +13,7 @@ function saveBgUrl(){
     if(!d.ok)throw Error(d.error||'保存失败');
     st.style.display='block';st.style.color='#27ae60';st.textContent='壁纸链接已保存';
     if(url)document.body.style.background='#e8e8ec url('+url+') center/cover no-repeat fixed';
-    else location.reload();
+    else document.body.style.background='';   // 清空链接就地生效，不整页刷新（会刷掉页内播放器）
   }).catch(function(e){st.style.display='block';st.style.color='#d63031';st.textContent=e.message||'保存失败';})
   .finally(function(){btn.disabled=false;btn.textContent='保存链接';});
 }
@@ -98,7 +98,10 @@ function registerPasskey(){
     return fetch('?action=pk-complete',{method:'POST',body:fd}).then(function(r){return r.json()});
   }).then(function(d){
     btn.disabled=false;btn.textContent='绑定通行密钥';
-    if(d&&d.ok)window.location.reload();
+    if(d&&d.ok){   // 就地软刷新重画密钥列表，不整页刷新
+      if(typeof navigateTo==='function')navigateTo(location.href,false);
+      else location.reload();
+    }
     else if(d&&d.err){logErr('err','complete:'+d.err);alert('绑定失败：'+d.err);}
   }).catch(function(e){
     btn.disabled=false;btn.textContent='绑定通行密钥';

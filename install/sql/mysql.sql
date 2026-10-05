@@ -32,10 +32,15 @@ CREATE TABLE IF NOT EXISTS `mapi_config` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- mapi_keys
+-- name：密钥名称（创建时必填，一个站/一个用途配一条密钥时便于区分）
+-- domain：该密钥的「授权域名」，非空时只有这个主机名能用这条密钥（get-config 校验）；
+--         创建时填的域名会同时写进 mapi_domains 并置为已授权。
 CREATE TABLE IF NOT EXISTS `mapi_keys` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `user_id` INT NOT NULL,
     `api_key` VARCHAR(64) NOT NULL,
+    `name` VARCHAR(64) NOT NULL DEFAULT '',
+    `domain` VARCHAR(190) NOT NULL DEFAULT '',
     `status` TINYINT DEFAULT 1,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -189,4 +194,29 @@ CREATE TABLE IF NOT EXISTS `mapi_stats` (
     `call_count` BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     UNIQUE KEY `idx_stat_date` (`stat_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── 宿主域名授权与底部偏移 ──────────────────────────────────────────
+-- 播放器被嵌入到哪个站，就按那个站的 Host 找这一行。判定顺序：
+--   mapi_config.domain_authorize = 0（默认）→ 一律放行，只按本行的 auto/修正量走
+--   mapi_config.domain_authorize = 1        → 域名必须在本表且 authorized=1，否则拒绝启动
+--   mapi_config.domain_auto_add = 1（默认，缺失即视为 1）→ 主机名第一次加载播放器时自动登记并放行
+-- 自动登记只补新行，不会动已有行（手动停用 authorized=0 的行不会被复活）。auto_added=1 标记自动登记。
+-- auto=1 时客户端自动探测宿主底部导航栏高度；lyrics_bottom / player_bottom 是额外修正量，
+-- player_bottom 为 NULL 表示跟随 lyrics_bottom。
+CREATE TABLE IF NOT EXISTS `mapi_domains` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `user_id` INT NOT NULL DEFAULT 0,
+    `domain` VARCHAR(190) NOT NULL DEFAULT '',
+    `authorized` TINYINT(1) NOT NULL DEFAULT 1,
+    `auto` TINYINT(1) NOT NULL DEFAULT 1,
+    `lyrics_bottom` INT NOT NULL DEFAULT 0,
+    `player_bottom` INT DEFAULT NULL,
+    `note` VARCHAR(255) NOT NULL DEFAULT '',
+    `auto_added` TINYINT(1) NOT NULL DEFAULT 0,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uniq_user_domain` (`user_id`, `domain`),
+    KEY `idx_domain` (`domain`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

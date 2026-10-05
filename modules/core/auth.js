@@ -2,30 +2,40 @@
     if (!MP) return;
     var _ = MP._;
 
+    // 提示兜底：ui.js 正常在启动前就已加载，但万一没有（被裁剪的构建），退回原来那条内联提示
+    function _notify(code, level) {
+        if (typeof MP.notice === 'function') { MP.notice(code, level ? { level: level } : undefined); return; }
+        var err = document.createElement('div');
+        err.textContent = code === 'no_key' ? '\u7f3a\u5c11 API Key\uff0c\u64ad\u653e\u5668\u65e0\u6cd5\u52a0\u8f7d' : String(code);
+        err.style.cssText = 'position:fixed;top:16px;right:16px;z-index:2147483647;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:500;background:rgba(108,92,231,.92);color:#fff;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,.2);transform:translateX(120%);opacity:0;transition:all .4s cubic-bezier(.4,0,.2,1);pointer-events:none';
+        document.body.appendChild(err);
+        requestAnimationFrame(function(){ err.style.transform = 'translateX(0)'; err.style.opacity = '1'; });
+        setTimeout(function(){ err.style.transform = 'translateX(120%)'; err.style.opacity = '0'; setTimeout(function(){ err.remove(); }, 400); }, 5000);
+    }
+
+    // 校验密钥：cb(ok, code) —— code 是失败原因码（no_key / invalid_key / key_disabled /
+    // rate_limited / offline / server_error），调用方据此给出各自的提示文案。
     MP.verifyKey = function(cb) {
         if (!_.API_KEY && !_.API_TOKEN) {
-            var err = document.createElement('div');
-            err.textContent = '\u7f3a\u5c11 API Key\uff0c\u64ad\u653e\u5668\u65e0\u6cd5\u52a0\u8f7d';
-            err.style.cssText = 'position:fixed;top:16px;right:16px;z-index:2147483647;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:500;background:rgba(108,92,231,.92);color:#fff;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,.2);transform:translateX(120%);opacity:0;transition:all .4s cubic-bezier(.4,0,.2,1);pointer-events:none';
-            document.body.appendChild(err);
-            requestAnimationFrame(function(){ err.style.transform = 'translateX(0)'; err.style.opacity = '1'; });
-            setTimeout(function(){ err.style.transform = 'translateX(120%)'; err.style.opacity = '0'; setTimeout(function(){ err.remove(); }, 400); }, 5000);
-            cb(false); return;
+            _notify('no_key');
+            cb(false, 'no_key'); return;
         }
         if (_.API_TOKEN) { cb(true); return; }
         var x = new XMLHttpRequest();
         x.open('POST', _.API_BASE + '?action=verify-key', true);
         x.setRequestHeader('Content-Type', 'application/json');
         x.timeout = 15000;                       // 请求卡住时也要让启动有个结果（宿主页按钮才能恢复为“加载”）
-        x.ontimeout = function() { cb(false); };
+        x.ontimeout = function() { cb(false, 'offline'); };
         x.onload = function() {
+            if (x.status === 429) { cb(false, 'rate_limited'); return; }        // 限流：不是密钥的问题
+            if (x.status >= 500) { cb(false, 'server_error'); return; }
             try {
                 var d = JSON.parse(x.responseText);
                 if (d.valid === true && d.token) _.API_TOKEN = d.token;
-                cb(d.valid === true);
-            } catch(e) { cb(false); }
+                cb(d.valid === true, d.valid === true ? '' : (d.code || 'invalid_key'));
+            } catch(e) { cb(false, 'server_error'); }
         };
-        x.onerror = function() { cb(false); };
+        x.onerror = function() { cb(false, 'offline'); };
         x.send(JSON.stringify({key: _.API_KEY}));
     };
 
@@ -39,7 +49,7 @@
             // 播放器是嵌在别人博客里的，读者不该为了一个 cookie 提示被按住、读不了文章。
             var card = document.createElement('div');
             card.id = 'mapi-consent-overlay';
-            card.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:2147483647;width:300px;max-width:calc(100vw - 32px);box-sizing:border-box;background:rgba(255,255,255,.85);backdrop-filter:blur(24px)saturate(200%);-webkit-backdrop-filter:blur(24px)saturate(200%);border:1px solid rgba(255,255,255,.75);border-radius:14px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.16);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;opacity:0;transform:translateY(10px);transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1)';
+            card.style.cssText = 'position:fixed;left:16px;bottom:calc(16px + var(--mapi-inset-player,0px));z-index:2147483647;width:300px;max-width:calc(100vw - 32px);box-sizing:border-box;background:rgba(255,255,255,.85);backdrop-filter:blur(24px)saturate(200%);-webkit-backdrop-filter:blur(24px)saturate(200%);border:1px solid rgba(255,255,255,.75);border-radius:14px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.16);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;opacity:0;transform:translateY(10px);transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1)';
 
             card.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
                 + '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'

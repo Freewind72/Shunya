@@ -2,6 +2,14 @@
     if (!MP) return;
     var _ = MP._;
 
+    // 底部占用变化时实时跟随（订阅一次就够了；探测与迟滞都在 core/inset.js 里）
+    if (typeof MP._onBottomInset === 'function') {
+        MP._onBottomInset(function (px) {
+            var el = document.querySelector('[data-mp="lrc"]');
+            if (el) el.style.bottom = px + 'px';
+        });
+    }
+
     MP.loadLrc = function() {
         if (!MP.ap || !MP.ap.list) return;
         var idx = MP.ap.list.index;
@@ -60,7 +68,8 @@
         if (!lrcEl) {
             lrcEl = document.createElement('div');
             lrcEl.setAttribute('data-mp', 'lrc');
-            var bottomPx = MP._getOverlapBottom();
+            // 底部占用统一由 core/inset.js 探测（已排除悬浮球/cookie 横幅与播放器自身）
+            var bottomPx = (typeof MP._getOverlapBottom === 'function') ? MP._getOverlapBottom() : 8;
             var isDark = MP.$('root') && MP.$('root').classList.contains('dark');
             var baseStyle = 'position:fixed;bottom:' + bottomPx + 'px;left:50%;transform:translateX(-50%);z-index:2147483646;font-size:15px;font-weight:700;white-space:nowrap;pointer-events:none'
                 + (isDark ? ';color:#d0d0d8;background:rgba(55,55,68,.65);backdrop-filter:blur(16px)saturate(200%);padding:6px 20px;border-radius:20px;border:1px solid rgba(255,255,255,.06)' : ';color:#1a1a2e;background:rgba(255,255,255,.3);backdrop-filter:blur(16px)saturate(200%);padding:6px 20px;border-radius:20px;border:1px solid rgba(255,255,255,.5)');
@@ -180,28 +189,5 @@
         }
     };
 
-    MP._getOverlapBottom = function() {
-        var maxBottom = 8;
-        var vpH = window.innerHeight;
-        var allEls = document.querySelectorAll('body *');
-        for (var i = 0; i < allEls.length; i++) {
-            var el = allEls[i];
-            if (el.id && typeof el.id === 'string' && el.id.indexOf('mapi-player-') === 0) continue;
-            if (el.getAttribute && el.getAttribute('data-mp') === 'lrc') continue;
-            var rect = el.getBoundingClientRect();
-            var elH = rect.bottom - rect.top;
-            if (elH <= 0) continue;
-            if (rect.bottom < vpH - 60 || rect.top > vpH) continue;
-            if (elH > vpH * 0.4) continue;
-            try {
-                var style = window.getComputedStyle(allEls[i]);
-                if (style.position !== 'fixed' && style.position !== 'sticky') continue;
-                if (style.visibility === 'hidden' || style.display === 'none') continue;
-            } catch(e) { continue; }
-            var offset = vpH - rect.top + 8;
-            if (offset > maxBottom) maxBottom = offset;
-        }
-        return Math.min(maxBottom, vpH / 2);
-    };
 
 })(window.__mapiPlayer);

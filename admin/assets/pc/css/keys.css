@@ -1,1 +1,9 @@
-/* keys.css — 密钥样式已在 base.css 中（key-card 类） */
+/* keys.css — 密钥页专有样式：卡片用 base.css 的公共 .key-card，
+   弹窗用公共层 .song-modal（样式也在 base.css）；这里只放本页自己的字段提示、按钮行与名称/域名小标签 */
+.key-field-hint{display:block;margin-top:6px;font-size:12px;line-height:1.6;color:rgba(0,0,0,.4)}
+.key-form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.key-owner{font-size:12px;color:rgba(0,0,0,.4);margin-left:6px}
+.key-domain{color:#0b7c8a}
+[data-theme="dark"] .key-field-hint{color:rgba(255,255,255,.4)}
+[data-theme="dark"] .key-owner{color:rgba(255,255,255,.4)}
+[data-theme="dark"] .key-domain{color:#7ff0ee}
