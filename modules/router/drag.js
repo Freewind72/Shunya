@@ -178,6 +178,9 @@
         var isMobile = _isMobile();
         var mh = _mH(), mv = _mV();
         var W = window.innerWidth, H = window.innerHeight;
+        // 宿主底部的横向 tab 栏 / 吸底条高度：播放器不许压在它上面
+        var insB = (typeof MP._getPlayerInset === 'function') ? (MP._getPlayerInset() || 0) : 0;
+        if (insB < 0) insB = 0;
 
         var hasTop = _hasTop();
         // 停靠方向只对「顶部锚定」有意义；底部锚定（后台设置的高度百分比）永远向上浮出
@@ -220,18 +223,21 @@
             // 夹取结果直接写成新的竖直锚点 —— 面板展开把按钮挤下去之后，收起面板不再回正。
             var box = _visibleBox();
             var dy = 0;
-            if (box.bottom > H - mv) dy = (H - mv) - box.bottom;
+            var limB = H - mv - insB;
+            if (box.bottom > limB) dy = limB - box.bottom;
             if (box.top + dy < mv) dy = mv - box.top;
             finalTop = Math.round(cur + dy);
             if (dy !== 0) MP._posTopUser = finalTop + 'px';
         } else {
-            // 底部锚定：优先用后台设置的默认位置，仅在可见范围越界时向上修正
-            var baseB = MP._posBottom ? MP._posBottom : (isMobile ? 35 : 50);
+            // 底部锚定：优先用后台设置的默认位置（_applyDefaultPos 已把底栏高度算进去），
+            // 仅在可见范围越界时向上修正；没有默认位置时退回安全值 + 底栏高度
+            var baseB = MP._posBottom ? MP._posBottom : ((isMobile ? 35 : 50) + insB);
             h.style.top = 'auto';
             h.style.bottom = baseB + 'px';
             var box2 = _visibleBox();
             var dy2 = 0;
-            if (box2.bottom > H - mv) dy2 = (H - mv) - box2.bottom;
+            var limB2 = H - mv - insB;
+            if (box2.bottom > limB2) dy2 = limB2 - box2.bottom;
             finalBottom = Math.round(dy2 < 0 ? baseB - dy2 : baseB);
         }
 
@@ -267,6 +273,15 @@
         if (!MP.open) MP._scheduleAutoHide();
         MP.saveState();
     };
+
+    // 宿主底栏高度变化时（自动探测到 / 后台改了修正量 / 转屏 / SPA 换页）把播放器重新摆一次
+    if (typeof MP._onBottomInset === 'function') {
+        MP._onBottomInset(function () {
+            if (MP._destroyed) return;
+            if (typeof MP._applyDefaultPos === 'function') MP._applyDefaultPos(true);
+            if (typeof MP._snap === 'function') MP._snap(true);
+        });
+    }
 
     MP.setPosition = function(pos) {
         var h = MP._hostRoot.host;

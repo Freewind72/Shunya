@@ -960,8 +960,9 @@
                 var mb = window.innerWidth <= 768 ? 35 : 50;
                 var _t = host.style.top;
                 if (!_t || _t === '' || _t === 'initial' || _t === 'auto') {
-                    // 底部锚定：尊重后台设置的默认位置
-                    host.style.bottom = (MP._posBottom ? MP._posBottom : mb) + 'px';
+                    // 底部锚定：尊重后台设置的默认位置（没有默认值时退回安全值 + 宿主底栏高度）
+                    var _ib = (typeof MP._getPlayerInset === 'function') ? (MP._getPlayerInset() || 0) : 0;
+                    host.style.bottom = (MP._posBottom ? MP._posBottom : (mb + (_ib > 0 ? _ib : 0))) + 'px';
                 }
             }
             // 沉浸式打开时重算歌词居中
@@ -1086,9 +1087,13 @@
             // 悬浮按钮挂在宿主底部下方 (bottom:-28px, 高 48px) → 按钮中心 ≈ 宿主底边 + 4px
             var bottomPx = Math.round(window.innerHeight - (window.innerHeight * pct / 100 - 4));
             if (bottomPx < 20) bottomPx = 20;
+            // 宿主站点底部有横向 tab 栏 / 吸底条时（自动探测或后台修正量），整块播放器再抬起来
+            var insB = (typeof MP._getPlayerInset === 'function') ? (MP._getPlayerInset() || 0) : 0;
+            if (insB < 0) insB = 0;
+            bottomPx += insB;
             // 保证宿主完整落在视口内（百分比过小时否则会被顶出屏幕）
             var hostH = host.getBoundingClientRect().height || 0;
-            var maxBottom = window.innerHeight - hostH - 4;
+            var maxBottom = window.innerHeight - hostH - 4 - insB;
             if (maxBottom < 20) maxBottom = 20;
             if (bottomPx > maxBottom) bottomPx = maxBottom;
             host.style.top = 'auto';

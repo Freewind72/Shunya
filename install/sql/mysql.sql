@@ -202,21 +202,41 @@ CREATE TABLE IF NOT EXISTS `mapi_stats` (
 --   mapi_config.domain_authorize = 1        → 域名必须在本表且 authorized=1，否则拒绝启动
 --   mapi_config.domain_auto_add = 1（默认，缺失即视为 1）→ 主机名第一次加载播放器时自动登记并放行
 -- 自动登记只补新行，不会动已有行（手动停用 authorized=0 的行不会被复活）。auto_added=1 标记自动登记。
--- auto=1 时客户端自动探测宿主底部导航栏高度；lyrics_bottom / player_bottom 是额外修正量，
--- player_bottom 为 NULL 表示跟随 lyrics_bottom。
+-- 每行可以绑定到一个密钥：key_id = 0 表示「不限」（该用户名下所有密钥共用这一行，升级上来的老数据保持该值），
+-- key_id > 0 时只有那条密钥能用这一行 —— 一个账号可以有多条密钥，各自授权各自的站。
+-- 唯一键由「用户 + 域名」放宽为「用户 + 密钥 + 域名」：同一个域名可以分别给两条密钥各建一行。
+-- @drop-index mapi_domains.uniq_user_domain
+-- 底部让出量分 PC / 移动端两套（同一个站在两端往往完全不一样：PC 多半没有贴底 tab 栏）。
+-- 旧的 auto / lyrics_bottom / player_bottom 作为两端都没单独设置时的兜底值保留：
+-- pc_* / mo_* 为 NULL 表示「这一端没单独设置，跟随旧字段」。
+-- 每端三个字段的含义：
+--   {端}_auto   = 1 自动探测宿主底栏高度；= 0 手动，只按下面那个修正量让位
+--   {端}_lyrics = 歌词框的修正量（自动模式下是「探测值 + 修正量 + 8px 间隙」，手动模式下是绝对值）
+--   {端}_player = 播放器本体的修正量；NULL 表示跟随同端的 lyrics
+--   {端}_detected = 客户端最近一次上报的探测值（后台只读展示，方便人工校准）
 CREATE TABLE IF NOT EXISTS `mapi_domains` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `user_id` INT NOT NULL DEFAULT 0,
+    `key_id` INT NOT NULL DEFAULT 0,
     `domain` VARCHAR(190) NOT NULL DEFAULT '',
     `authorized` TINYINT(1) NOT NULL DEFAULT 1,
     `auto` TINYINT(1) NOT NULL DEFAULT 1,
     `lyrics_bottom` INT NOT NULL DEFAULT 0,
     `player_bottom` INT DEFAULT NULL,
+    `pc_auto` TINYINT(1) DEFAULT NULL,
+    `pc_lyrics` INT DEFAULT NULL,
+    `pc_player` INT DEFAULT NULL,
+    `mo_auto` TINYINT(1) DEFAULT NULL,
+    `mo_lyrics` INT DEFAULT NULL,
+    `mo_player` INT DEFAULT NULL,
+    `pc_detected` INT NOT NULL DEFAULT 0,
+    `mo_detected` INT NOT NULL DEFAULT 0,
+    `detected_at` DATETIME DEFAULT NULL,
     `note` VARCHAR(255) NOT NULL DEFAULT '',
     `auto_added` TINYINT(1) NOT NULL DEFAULT 0,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uniq_user_domain` (`user_id`, `domain`),
+    UNIQUE KEY `uniq_user_key_domain` (`user_id`, `key_id`, `domain`),
     KEY `idx_domain` (`domain`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

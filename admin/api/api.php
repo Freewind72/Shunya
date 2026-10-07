@@ -396,6 +396,7 @@ switch ($action) {
         $keyRow = $keyRes->fetch_assoc();
         if (!$keyRow) json_exit(['ok' => false, 'config' => null, 'code' => key_fail_code($db_log, $k), 'msg' => 'invalid key']);
         $userId = (int)$keyRow['user_id'];
+        $keyId  = (int)($keyRow['id'] ?? 0);   // 域名授权可以按密钥区分（key_id=0 的行 = 该账号所有密钥共用）
         // 密钥自己的「授权域名」（创建密钥时填的）：非空时只有这一个主机名能用这条密钥
         $keyDomain = strtolower(trim((string)($keyRow['domain'] ?? '')));
         $userStmt = $db_log->prepare("SELECT auto_theme, theme_mode, lyrics_default, autoplay_default FROM mapi_users WHERE id=?");
@@ -502,6 +503,12 @@ switch ($action) {
                         'auto'         => true,
                         'lyricsBottom' => 0,
                         'playerBottom' => 0,
+                        'pcAuto'       => true,
+                        'pcLyrics'     => 0,
+                        'pcPlayer'     => 0,
+                        'moAuto'       => true,
+                        'moLyrics'     => 0,
+                        'moPlayer'     => 0,
                         'reason'       => 'key_domain',
                         'keyDomain'    => $keyDomain,
                     ];
@@ -510,9 +517,10 @@ switch ($action) {
                     $sw = $db_log->query("SELECT config_value FROM mapi_config WHERE config_key='domain_authorize'");
                     if ($sw && is_object($sw)) { $swRow = $sw->fetch_assoc(); $authorizeOn = ((string)($swRow['config_value'] ?? '0')) === '1'; }
                     $row = null;
-                    $dStmt = $db_log->prepare("SELECT domain, authorized, auto, lyrics_bottom, player_bottom FROM mapi_domains WHERE user_id=? AND domain=? LIMIT 1");
+                    // 域名授权按密钥区分：绑定到本条密钥的行优先（key_id 大的先），其次才是 key_id=0（不限）的行
+                    $dStmt = $db_log->prepare("SELECT * FROM mapi_domains WHERE user_id=? AND domain=? AND (key_id=0 OR key_id=?) ORDER BY key_id DESC LIMIT 1");
                     if ($dStmt) {
-                        $dStmt->bind_param('is', $userId, $host);
+                        $dStmt->bind_param('isi', $userId, $host, $keyId);
                         $dStmt->execute();
                         $dRes = $dStmt->get_result();
                         $row = $dRes ? $dRes->fetch_assoc() : null;
@@ -521,27 +529,65 @@ switch ($action) {
                     // 直接写进 mapi_domains 并授权，免得换了域名 / 上了 CDN / 多了个 www 就被自己的开关挡住。
                     // 已有行一律不动：管理员手动停用（authorized=0）的行不会被复活。
                     if (!$row && $authorizeOn && domain_auto_add_on($db_log)) {
-                        $autoRow = domain_auto_register($db_log, $userId, $host);
+                        $autoRow = domain_auto_register($db_log, $userId, $host, $keyId);
                         if ($autoRow) $row = $autoRow;
                     }
                     if ($row || $authorizeOn || $keyDomain !== '') {
                         // 密钥绑定的域名命中主机名时直接算已授权（等于密钥自带一份授权）
                         $authorized = $keyDomain !== '' ? true : ($row ? ((int)$row['authorized'] === 1) : false);
-                        $lyr = $row ? (int)$row['lyrics_bottom'] : 0;
-                        $plr = ($row && $row['player_bottom'] !== null) ? (int)$row['player_bottom'] : $lyr;
+                        // 分 PC / 移动端两套让出配置；老数据（pc_* / mo_* 为 NULL）回落到旧字段
+                        $dev = domains_device_cfg($row);
                         $domainCfg = [
                             'host'         => $host,
                             'authorized'   => $authorized,
                             'blocked'      => $authorizeOn && !$authorized,
-                            'auto'         => $row ? ((int)$row['auto'] === 1) : true,
-                            'lyricsBottom' => $lyr,
-                            'playerBottom' => $plr,
+                            // 旧字段：给老版本客户端兜底（1.6.x 只认这三个）
+                            'auto'         => $dev['pc']['auto'],
+                            'lyricsBottom' => $dev['pc']['lyrics'],
+                            'playerBottom' => $dev['pc']['player'],
+                            // 新字段：PC 与移动端各自一套
+                            'pcAuto'       => $dev['pc']['auto'],
+                            'pcLyrics'     => $dev['pc']['lyrics'],
+                            'pcPlayer'     => $dev['pc']['player'],
+                            'moAuto'       => $dev['mobile']['auto'],
+                            'moLyrics'     => $dev['mobile']['lyrics'],
+                            'moPlayer'     => $dev['mobile']['player'],
                         ];
                     }
                 }
             }
         } catch (Throwable $e) { $domainCfg = null; }
         json_exit(['ok' => true, 'config' => ['auto_theme' => $autoTheme, 'theme_mode' => $themeMode, 'lyrics_default' => $lyricsDefault, 'autoplay_default' => $autoplayDefault, 'player_pos' => $playerPos, 'playlists' => $playlists, 'source' => $sourceCfg, 'domain' => $domainCfg]]);
+
+    case 'inset-report':
+        // 播放器上报「在宿主页面探测到的底部栏高度」。后台「域名」页据此显示最近探测值，
+        // 方便管理员在探测不准的站点上手动填修正量。只影响 mapi_domains 的两个只读展示列，
+        // 不参与任何判定；主机名从 Referer / Origin 取，与 get-config 同一套规则。
+        if (!$db_log) json_exit(['ok' => false, 'msg' => 'db unavailable']);
+        $k = trim((string)($_POST['key'] ?? ($_GET['key'] ?? '')));
+        if ($k === '') json_exit(['ok' => false, 'msg' => 'missing key']);
+        $kStmt = $db_log->prepare("SELECT id, user_id FROM mapi_keys WHERE api_key=? AND status=1");
+        $kStmt->bind_param('s', $k);
+        $kStmt->execute();
+        $kRes = $kStmt->get_result();
+        $kRow = $kRes ? $kRes->fetch_assoc() : null;
+        if (!$kRow) json_exit(['ok' => false, 'msg' => 'invalid key']);
+        $rUser = (int)$kRow['user_id'];
+        $rKey  = (int)($kRow['id'] ?? 0);
+
+        $hostSrc = '';
+        foreach (['HTTP_REFERER', 'HTTP_ORIGIN'] as $_hk) {
+            if (!empty($_SERVER[$_hk])) { $hostSrc = (string)$_SERVER[$_hk]; break; }
+        }
+        $rHost = $hostSrc !== '' ? (string)parse_url($hostSrc, PHP_URL_HOST) : '';
+        $rHost = strtolower(trim($rHost, ". \t\n\r\0\x0B"));
+        if ($rHost === '' || !preg_match('/^[a-z0-9.-]+$/', $rHost)) {
+            json_exit(['ok' => false, 'msg' => 'no host']);
+        }
+        $rDev = ((string)($_POST['device'] ?? '')) === 'mobile' ? 'mobile' : 'pc';
+        $rVal = (int)($_POST['value'] ?? 0);
+        $rOk  = domains_report_inset($db_log, $rUser, $rHost, $rDev, $rVal, $rKey);
+        json_exit(['ok' => $rOk, 'host' => $rHost, 'device' => $rDev, 'value' => $rVal]);
 
     case 'get-announcement':
         $k = $_GET['key'] ?? '';

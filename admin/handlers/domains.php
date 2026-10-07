@@ -30,14 +30,56 @@ if ($action_key === 'domains-save') {
     $id     = (int)($_POST['id'] ?? 0);
     $domain = trim((string)($_POST['domain'] ?? ''));
 
-    // player_bottom 留空 = 跟随 lyrics_bottom（存 NULL）
-    $pbRaw = trim((string)($_POST['player_bottom'] ?? ''));
-    $res = domains_save($db, $__domUserId, $domain, [
+    // 「指定密钥」：0 = 不限（该账号所有密钥共用这一行），> 0 = 只对那条密钥生效。
+    // 普通管理员 / 用户只能选自己名下的密钥；超管可以选任何人的，用来把某一行指派给别人的密钥。
+    $keyId    = max(0, (int)($_POST['key_id'] ?? 0));
+    $keyOwner = 0;
+    if ($keyId > 0) {
+        $keyRow = domains_key_get($db, $keyId);
+        if (!$keyRow) {
+            echo json_encode(['ok' => false, 'id' => 0, 'domain' => '', 'message' => '指定的密钥不存在', 'error' => 'key_not_found'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $keyOwner = (int)$keyRow['user_id'];
+        if (!$__domIsSuper && $keyOwner !== $__domUserId) {
+            echo json_encode(['ok' => false, 'id' => 0, 'domain' => '', 'message' => '不能指定别人的密钥', 'error' => 'key_forbidden'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+    // 归属用户：选了密钥就是密钥的主人；新增且不限密钥时归当前操作者；编辑时留 0 表示「保持原主人」。
+    $ownerId = $keyOwner > 0 ? $keyOwner : (($id > 0) ? 0 : $__domUserId);
+
+    // 分端配置：表单里 PC 与移动端各一套（各自的「自动」开关 + 歌词修正 + 播放器修正）。
+    // 字段是 array_key_exists 判断而不是 !empty —— 老页面（缓存里的旧表单）不带这些字段时，
+    // 传 null 表示「这一端没设置」，让数据层回落到旧字段，避免把老配置悄悄改成手动模式。
+    $hasPcAuto = array_key_exists('pc_auto', $_POST);
+    $hasMoAuto = array_key_exists('mo_auto', $_POST);
+    $pcAuto    = $hasPcAuto ? (!empty($_POST['pc_auto']) ? 1 : 0) : null;
+    $moAuto    = $hasMoAuto ? (!empty($_POST['mo_auto']) ? 1 : 0) : null;
+    $pcLyrics  = array_key_exists('pc_lyrics', $_POST) ? (int)$_POST['pc_lyrics'] : null;
+    $moLyrics  = array_key_exists('mo_lyrics', $_POST) ? (int)$_POST['mo_lyrics'] : null;
+    // 播放器修正留空 = 跟随同端歌词修正（存 NULL）
+    $pcPlayer  = trim((string)($_POST['pc_player'] ?? ''));
+    $moPlayer  = trim((string)($_POST['mo_player'] ?? ''));
+    $pcPlayerV = ($pcPlayer === '') ? null : (int)$pcPlayer;
+    $moPlayerV = ($moPlayer === '') ? null : (int)$moPlayer;
+
+    $res = domains_save($db, $__domScopeUid, $domain, [
         'id'            => $id,
+        'key_id'        => $keyId,
+        'owner_id'      => $ownerId,
         'authorized'    => !empty($_POST['authorized']),
-        'auto'          => !empty($_POST['auto']),
-        'lyrics_bottom' => (int)($_POST['lyrics_bottom'] ?? 0),
-        'player_bottom' => ($pbRaw === '' ? null : (int)$pbRaw),
+        // 旧字段：跟随 PC 端，给 1.6.x 及更早的客户端兜底
+        'auto'          => $pcAuto === null ? 1 : $pcAuto,
+        'lyrics_bottom' => $pcLyrics === null ? 0 : $pcLyrics,
+        'player_bottom' => $pcPlayerV,
+        // 分端字段
+        'pc_auto'       => $pcAuto,
+        'pc_lyrics'     => $pcLyrics,
+        'pc_player'     => $pcPlayerV,
+        'mo_auto'       => $moAuto,
+        'mo_lyrics'     => $moLyrics,
+        'mo_player'     => $moPlayerV,
         'note'          => (string)($_POST['note'] ?? ''),
     ]);
 

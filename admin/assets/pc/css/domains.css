@@ -97,3 +97,52 @@
 [data-theme="dark"] .dom-cell-note{color:rgba(255,255,255,.7)}
 [data-theme="dark"] .tag-ok{background:rgba(90,200,120,.15);color:#7ddc9a;border-color:rgba(90,200,120,.3)}
 [data-theme="dark"] .tag-off{background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.15)}
+/* ===== 底部让出量：PC / 移动端两块（各带「自动」开关，1.6.1 新增） ===== */
+.dom-devices{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+.dom-device{border:1px solid rgba(0,0,0,.07);border-radius:11px;padding:12px 14px;background:rgba(0,0,0,.015);min-width:0}
+.dom-device-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.dom-device-name{font-size:13px;font-weight:600;color:rgba(0,0,0,.7)}
+.dom-device-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.dom-device .dom-field label{font-size:11.5px}
+.dom-device-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap}
+.dom-device-hint{font-size:11px;color:rgba(0,0,0,.32);line-height:1.6}
+.dom-device-detected{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:rgba(0,0,0,.45)}
+.dom-device-detected b{color:var(--accent);font-variant-numeric:tabular-nums}
+.dom-device-detected[hidden]{display:none}
+.btn-xs{border:1px solid rgba(0,0,0,.12);background:transparent;border-radius:7px;padding:2px 8px;font-size:11.5px;color:rgba(0,0,0,.55);cursor:pointer;font-family:inherit;line-height:1.6}
+.btn-xs:hover{background:rgba(0,0,0,.05)}
+.dom-switch-sm .dom-switch-track{width:32px;height:17px}
+.dom-switch-sm .dom-switch-dot{width:13px;height:13px}
+.dom-switch-sm input:checked + .dom-switch-track .dom-switch-dot{left:17px}
+.dom-switch-sm .dom-switch-text{font-size:11.5px}
+
+/* 列表里的分端单元格 */
+.dom-th-sub{display:block;font-weight:400;font-size:10.5px;color:rgba(0,0,0,.3);margin-top:1px}
+.dom-dev-cell{white-space:nowrap}
+.dom-dev-cell .dom-num{margin-left:6px;color:rgba(0,0,0,.55)}
+.dom-dev-cell .dom-num.dom-same{color:rgba(0,0,0,.35)}
+.dom-detected-cell{white-space:nowrap;color:rgba(0,0,0,.5)}
+
+/* 卡片（窄屏）里的分端行 */
+.dom-card-devices{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.dom-card-device{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:rgba(0,0,0,.55)}
+.dom-card-dev-name{font-weight:600;color:rgba(0,0,0,.7);min-width:44px}
+.dom-card-det{font-size:11px;color:rgba(0,0,0,.4);font-variant-numeric:tabular-nums}
+
+@media (max-width:820px){.dom-devices{grid-template-columns:1fr}}
+
+/* ===== 暗色主题（分端部分） ===== */
+[data-theme="dark"] .dom-device{border-color:rgba(255,255,255,.09);background:rgba(255,255,255,.02)}
+[data-theme="dark"] .dom-device-name{color:rgba(255,255,255,.8)}
+[data-theme="dark"] .dom-device-hint{color:rgba(255,255,255,.38)}
+[data-theme="dark"] .dom-device-detected{color:rgba(255,255,255,.55)}
+[data-theme="dark"] .dom-device-detected b{color:var(--accent)}
+[data-theme="dark"] .btn-xs{border-color:rgba(255,255,255,.16);color:rgba(255,255,255,.6)}
+[data-theme="dark"] .btn-xs:hover{background:rgba(255,255,255,.08)}
+[data-theme="dark"] .dom-th-sub{color:rgba(255,255,255,.35)}
+[data-theme="dark"] .dom-dev-cell .dom-num{color:rgba(255,255,255,.65)}
+[data-theme="dark"] .dom-dev-cell .dom-num.dom-same{color:rgba(255,255,255,.45)}
+[data-theme="dark"] .dom-detected-cell{color:rgba(255,255,255,.6)}
+[data-theme="dark"] .dom-card-device{color:rgba(255,255,255,.65)}
+[data-theme="dark"] .dom-card-dev-name{color:rgba(255,255,255,.8)}
+[data-theme="dark"] .dom-card-det{color:rgba(255,255,255,.45)}
