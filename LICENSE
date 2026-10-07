@@ -5,68 +5,60 @@ Copyright (c) 2026 Freewind72. All rights reserved.
 This license applies to all source code, user interface, documentation and other files in
 this repository (the "Software").
 
-The Software is source-available, NOT open source: its source code is publicly visible, but
-its use, modification and distribution are restricted by the terms below.
+The Software is source-available, NOT open source. Everything is permitted except commercial
+use: you may use, copy, modify, merge, publish, distribute and sublicense the Software, and
+use it for any non-commercial purpose, subject to the conditions below. Commercial use is
+prohibited.
 
 This English text is the only official version of this license. Translations, if any, are
 provided for convenience only and have no legal effect.
 
-By downloading, copying, installing, running or modifying the Software, you agree to be bound
-by all of the terms below. If you do not agree, stop using the Software immediately and
-delete the Software and all copies of it.
+By downloading, copying, installing, running, modifying or distributing the Software, you
+agree to be bound by all of the terms below. If you do not agree, stop using the Software
+immediately and delete the Software and all copies of it.
 
-1. Grant. Subject to full compliance with this license, you are granted a free,
-   non-exclusive, non-transferable and revocable license to:
-   (a) download, install and run the software for personal, non-commercial purposes such
-       as learning, research, testing and backup;
-   (b) modify the source code for your own personal use and run the modified version on a
-       website you own or control that does not generate revenue.
+1. Grant. Permission is hereby granted, free of charge, to any person obtaining a copy of the
+   Software, to deal in the Software without restriction for any non-commercial purpose,
+   including without limitation the rights to use, copy, modify, merge, publish, distribute
+   and sublicense the Software, and to permit persons to whom the Software is furnished to do
+   so, subject to the conditions of this license.
 
-2. Restrictions. Without the prior written permission of the copyright holder, you may not:
-   (a) use the software or any modified version for any commercial purpose, including but
-       not limited to selling, renting, sublicensing, charging per use or per period, paid
-       downloads, subscription or membership services, including the software as part of a
-       paid product or service, providing paid services based on the software, or earning
-       revenue through advertising, promotion, traffic or affiliate links in pages or apps
-       that deploy the software; use in the business operations of a company, merchant or
-       other for-profit entity is likewise a commercial purpose;
-   (b) redistribute, resell, transfer or sublicense the software or any modified version,
-       whether or not for a fee and whether or not modified, or otherwise make the source
-       code, install package or a runnable copy available to any third party; sharing a
-       link to the official release page is permitted;
-   (c) remove, obscure or alter any copyright notice, attribution, this license text, or
-       the project name, author and source information displayed in the interface;
-   (d) use the project name, logo or the author's name to endorse, promote or advertise
-       your modified version, derivative work or service;
-   (e) republish or relicense the software or any modified version under any license other
-       than this one.
+2. Non-commercial condition. The Software and any derivative work may be used, copied,
+   modified, published, distributed or sublicensed only for non-commercial purposes.
+   "Commercial purpose" includes, without limitation: selling, renting, leasing, charging per
+   use or per period, paid downloads, paid redistribution, sublicensing for a fee, including
+   the Software or a derivative work as part of a paid product or service, providing paid
+   services based on the Software, and earning revenue through advertising, promotion, traffic
+   or affiliate links in pages or applications that deploy the Software. Use in the business
+   operations of a company, merchant or other for-profit entity is likewise a commercial
+   purpose. If you are unsure whether a planned use is commercial, obtain the prior written
+   permission of the copyright holder before proceeding.
 
-3. Modifications. Modifications are for personal use only; your modified version remains
-   subject to this license and may not be published or made available to third parties.
-   Cloning or forking the repository in order to submit improvements to this project is
-   permitted, provided the copy is not used for any other purpose and is not published or
-   deployed as a service for others. You are solely responsible for your modifications,
-   which must not remove the original copyright notices. Contributions you submit to this
-   project (pull requests, patches, suggestions) may be freely used, modified and
-   relicensed by the copyright holder.
+3. Attribution. The above copyright notice and this permission notice must be included in all
+   copies or substantial portions of the Software. You may not remove, obscure or alter the
+   copyright notice, the author's attribution, or the project name and source information
+   displayed in the interface. No trademark, logo or trade name rights are granted.
 
-4. Termination. This license terminates automatically, without notice, if you breach any
-   term. Upon termination you must stop using the software and delete all copies, including
-   modified versions.
+4. Derivative works. You may modify the Software and distribute your modified version, but
+   only for non-commercial purposes and only under this same license: a derivative work
+   remains subject to all of the terms of this license, and its recipients receive no broader
+   rights than those granted here.
 
-5. Third-party components included in the software (such as APlayer) remain governed by
-   their own licenses; this license applies only to the parts copyrighted by the copyright
-   holder.
+5. Termination. This license terminates automatically, without notice, if you breach any term,
+   including any commercial use. Upon termination you must stop using the Software and delete
+   all copies, including modified versions.
 
-6. Disclaimer. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+6. Third-party components included in the Software (such as APlayer) remain governed by their
+   own licenses; this license applies only to the parts copyrighted by the copyright holder.
+
+7. Disclaimer. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-   PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER
-   BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-   OTHER DEALINGS IN THE SOFTWARE.
+   PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER BE
+   LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
-7. Miscellaneous. No trademark, logo or trade name rights are granted. All rights not
-   expressly granted are reserved. If any provision is held invalid or unenforceable, the
-   remaining provisions remain in full force. The copyright holder may revise this license
-   at any time; revised terms apply to versions released afterwards and do not affect
-   licenses lawfully obtained under the previous terms.
+8. Miscellaneous. All rights not expressly granted are reserved. If any provision is held
+   invalid or unenforceable, the remaining provisions remain in full force. The copyright
+   holder may revise this license at any time; revised terms apply to versions released
+   afterwards and do not affect licenses lawfully obtained under the previous terms.
