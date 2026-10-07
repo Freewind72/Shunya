@@ -1,79 +1,19 @@
-顺雅（Shunya / Msapi）源码许可协议 1.0
 Shunya (Msapi) Source License 1.0
 
-版权所有 © 2026 Freewind72，保留所有权利。
 Copyright (c) 2026 Freewind72. All rights reserved.
 
-本协议适用于本仓库中的全部源代码、界面、文档及其他文件（以下称「本软件」）。
-本软件**不是开源软件**：源代码公开可见，但使用、修改与分发均受下述条款限制。
-任何人下载、复制、安装、运行或修改本软件，即视为已阅读、理解并同意本协议全部条款；
-如不同意，请立即停止使用并删除本软件及其全部副本。
+This license applies to all source code, user interface, documentation and other files in
+this repository (the "Software").
 
+The Software is source-available, NOT open source: its source code is publicly visible, but
+its use, modification and distribution are restricted by the terms below.
 
-一、许可授予
+This English text is the only official version of this license. Translations, if any, are
+provided for convenience only and have no legal effect.
 
-在完全遵守本协议的前提下，著作权人授予你一项免费的、非排他的、不可转让、可撤销的许可：
-
-1. 为个人学习、研究、测试、备份等非商业目的，下载、安装、运行本软件；
-2. 为个人自用目的修改本软件源代码，并在你本人拥有或控制的、不以此营利的站点上部署运行修改后的版本。
-
-
-二、使用限制
-
-未经著作权人事先书面许可，你不得实施下列行为：
-
-1. 将本软件或其任何修改版用于商业用途。「商业用途」包括但不限于：出售、出租、转授权、按次或按期收费、
-   付费下载、订阅或会员制、将本软件作为收费产品或收费服务的组成部分、以本软件为核心对外提供有偿服务，
-   以及在部署本软件的页面或应用中通过广告、推广、导流、带货等方式获取收益；在企业、商户或其他营利性
-   主体的生产经营活动中使用本软件，同样属于商业用途。
-2. 再分发、转售、转让、转授权本软件或其修改版（无论是否收费、无论是否经过修改），或以任何形式向第三方
-   提供本软件的全部或部分源代码、安装包、可运行副本；对外分享本项目的官方发布页面链接不受此限。
-3. 删除、遮盖、篡改本软件中的版权声明、作者署名、本协议文本，以及界面上显示的项目名称、作者与出处信息。
-4. 使用本项目的名称、标识或作者名义，为你的修改版、衍生作品或服务作背书、宣传或推广。
-5. 将本软件或其修改版以本协议之外的其他许可协议重新发布或重新授权。
-
-
-三、修改与派生
-
-1. 修改仅限自用：你修改后的版本（含其任何部分）仍受本协议约束，不得对外发布或提供给第三方。
-2. 为向本项目提交改进而克隆或派生（Fork）本仓库是允许的，但该副本不得用于其他用途，也不得对外发布、
-   部署为面向他人的服务。
-3. 你对自己作出的修改及其产生的一切后果承担全部责任；修改不得移除本软件原有的版权声明。
-4. 你向本项目提交的改进（包括 PR、补丁、建议等），视为同意著作权人可自由使用、修改与再许可该内容。
-
-
-四、终止
-
-你违反本协议任何条款时，本许可自动终止，且无需另行通知。许可终止后，你应立即停止使用，并删除本软件
-及其全部副本（含你作出的修改版）。
-
-
-五、免责声明
-
-本软件按「现状」提供，不附带任何明示或默示的担保，包括但不限于对适销性、特定用途适用性及不侵权的担保。
-在任何情况下，作者或著作权人均不就因本软件或本软件的使用或其他行为而产生的任何索赔、损害或其他责任
-承担责任，无论是合同之诉、侵权之诉还是其他。
-
-
-六、其他条款
-
-1. 本软件包含的第三方组件（如 APlayer 等）仍受其各自许可协议约束，本协议仅适用于著作权人享有著作权的部分。
-2. 本协议不授予你任何商标、标识或商号的使用权。
-3. 本协议未明确授予的权利，均由著作权人保留。
-4. 若本协议任何条款被认定为无效或不可执行，其余条款仍然完全有效。
-5. 著作权人保留随时修改本协议或调整授权方式的权利；新的条款自发布之日起适用于之后发布的版本，
-   不影响已按旧条款合法获得的许可。
-
-
-────────────────────────────────────────────────────────────────────────────
-English version (for reference; the Chinese text prevails)
-────────────────────────────────────────────────────────────────────────────
-
-Shunya (Msapi) Source License 1.0
-Copyright (c) 2026 Freewind72. All rights reserved.
-
-This software is source-available, NOT open source. By downloading, copying, installing,
-running or modifying the software, you agree to be bound by the terms below.
+By downloading, copying, installing, running or modifying the Software, you agree to be bound
+by all of the terms below. If you do not agree, stop using the Software immediately and
+delete the Software and all copies of it.
 
 1. Grant. Subject to full compliance with this license, you are granted a free,
    non-exclusive, non-transferable and revocable license to:
