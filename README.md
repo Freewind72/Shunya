@@ -278,7 +278,8 @@ Msapi/
 - **前端**：原生 JavaScript（ES5+）、Shadow DOM、APlayer 1.10.1
 - **后端**：PHP、MySQL / SQLite
 - **音乐 API**：QQ 音乐与网易云音乐代理转发
-- **CDN 依赖**：APlayer CSS 与 JS 通过 jsDelivr 加载
+- **依赖**：嵌入播放器不依赖第三方 CDN——APlayer 1.10.1 只作音频内核，随包自托管（`assets/lib/aplayer/`），可用 `cdn-aplayer-js` 覆盖；界面样式自带，不加载 APlayer 的 CSS
+- **后台资源**：管理端地址集中在 `admin/api/relay.php`（Bootstrap 与后台测试播放器用的 APlayer 走 CDN）
 
 ---
 
