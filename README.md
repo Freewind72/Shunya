@@ -6,7 +6,6 @@
 
 基于 Shadow DOM 隔离的轻量级嵌入式音乐播放器 —— 一行 `<script>` 接入，与宿主页面零 CSS 冲突
 
-![License](https://img.shields.io/badge/License-Non--Commercial-dc3545?style=flat-square)
 ![PHP](https://img.shields.io/badge/PHP-8.5%2B-777BB4?style=flat-square&logo=php&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-4479A1?style=flat-square&logo=mysql&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=flat-square&logo=sqlite&logoColor=white)
@@ -211,7 +210,7 @@ URL 上的 `?route=` 可临时覆盖。
 Msapi/
 ├── index.php                  # 落地页（顺雅 · 声波宇宙）
 ├── favicon.ico
-├── LICENSE                    # 非商业自用许可（禁止商用）
+├── LICENSE                    # 许可全文
 ├── config/
 │   └── config.php             # 数据库与站点配置（安装向导生成）
 ├── api.php                    # 播放器总入口：?key=密钥 → 解析皮肤 → 输出启动脚本
@@ -285,14 +284,7 @@ Msapi/
 
 ## 许可协议
 
-本软件**源码公开，但不是开源软件**：除商业用途外不受限制——可自由使用、复制、修改、合并、发布、分发与再许可。
-
-[Shunya (Msapi) Source License 1.0](LICENSE) © 2026 Freewind72
-
-> 许可全文为英文（`LICENSE`），英文是唯一正式文本；README 此处的中文说明仅供参考。
-
-- 可以：使用、复制、修改、合并、发布、分发、再许可（含修改后发布），只要用于非商业目的
-- 不可以：任何商业用途（出售、出租、收费、付费下载、订阅会员、广告导流变现、企业生产经营等）；去除版权声明与作者署名；把修改版换成其他许可发布
+[LICENSE](LICENSE)
 
 ---
 
