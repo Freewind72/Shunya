@@ -6,7 +6,7 @@
 
 基于 Shadow DOM 隔离的轻量级嵌入式音乐播放器 —— 一行 `<script>` 接入，与宿主页面零 CSS 冲突
 
-![License](https://img.shields.io/badge/License-MIT-3DA639?style=flat-square)
+![License](https://img.shields.io/badge/License-Non--Commercial-dc3545?style=flat-square)
 ![PHP](https://img.shields.io/badge/PHP-8.5%2B-777BB4?style=flat-square&logo=php&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-4479A1?style=flat-square&logo=mysql&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=flat-square&logo=sqlite&logoColor=white)
@@ -211,7 +211,7 @@ URL 上的 `?route=` 可临时覆盖。
 Msapi/
 ├── index.php                  # 落地页（顺雅 · 声波宇宙）
 ├── favicon.ico
-├── LICENSE                    # MIT
+├── LICENSE                    # 非商业自用许可（禁止商用）
 ├── config/
 │   └── config.php             # 数据库与站点配置（安装向导生成）
 ├── api.php                    # 播放器总入口：?key=密钥 → 解析皮肤 → 输出启动脚本
@@ -282,9 +282,14 @@ Msapi/
 
 ---
 
-## 开源许可
+## 许可协议
 
-[MIT](LICENSE) © 2026 Freewind72
+本软件**源码公开，但不是开源软件**：禁止任何商业用途，修改仅限自用。
+
+[顺雅（Shunya / Msapi）源码许可协议 1.0](LICENSE) © 2026 Freewind72
+
+- 可以：个人学习、研究、测试、备份；自行修改源码，并部署在自己拥有且不营利的站点上
+- 不可以：任何商业用途（出售、出租、收费、付费下载、订阅会员、广告导流变现、企业生产经营等）；再分发、转售、转让源码或修改版；去除版权声明与作者署名
 
 ---
 
