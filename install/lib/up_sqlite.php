@@ -24,18 +24,25 @@ function upgrade_sqlite(array $cfg): void {
 }
 
 // 同步表结构（安装与每次访问共用）
-function schema_sync_sqlite(SQLite3 $db): void {
+// $force = true 时不做稳态短路（安装器必须真的全查一遍）。
+function schema_sync_sqlite(SQLite3 $db, bool $force = false): void {
+    // 与 MySQL 同一套短路：指纹（install/sql/mysql.sql 内容 md5）一致且无跳过/失败标记就跳过全量探测。
+    // SQLite 的结构本来就是从 mysql.sql 推导的，所以两种驱动共用同一个 _schema_stamp。
+    if (!$force && schema_can_skip($db)) {
+        return;
+    }
+
     $migrations = get_migrations();
     $dir        = schema_directives();
 
     // 显式删除
     foreach ($dir['drop_table'] as $t) {
         if (!preg_match('/^\w+$/', $t)) continue;
-        try { $db->exec("DROP TABLE IF EXISTS \"{$t}\""); } catch (Throwable $e) { error_log("MAPI schema(SQLite): drop table {$t}: " . $e->getMessage()); }
+        try { $db->exec("DROP TABLE IF EXISTS \"{$t}\""); } catch (Throwable $e) { mig_note_failure(); error_log("MAPI schema(SQLite): drop table {$t}: " . $e->getMessage()); }
     }
     foreach ($dir['drop_index'] as $d) {
         if (!preg_match('/^\w+$/', $d['index'])) continue;
-        try { $db->exec("DROP INDEX IF EXISTS \"" . $d['index'] . "\""); } catch (Throwable $e) { error_log("MAPI schema(SQLite): drop index {$d['index']}: " . $e->getMessage()); }
+        try { $db->exec("DROP INDEX IF EXISTS \"" . $d['index'] . "\""); } catch (Throwable $e) { mig_note_failure(); error_log("MAPI schema(SQLite): drop index {$d['index']}: " . $e->getMessage()); }
     }
 
     // 需要重建的表
@@ -104,6 +111,9 @@ function schema_sync_sqlite(SQLite3 $db): void {
     }
 
     apply_sqlite_indexes($db, get_migration_indexes());
+
+    // 全部跑完且没有失败 → 落指纹（与 MySQL 共用一个 key，因为结构来源都是 mysql.sql）
+    schema_stamp_commit($db);
 }
 
 // 读取结构标记
@@ -177,13 +187,19 @@ function rebuild_sqlite_table(SQLite3 $db, string $table, array $desired, array 
     }
     $colNames = implode(', ', $commonCols);
 
+    // 重建必须"先 DROP 旧表、再改名"——中间任何一步失败都会两头落空
+    // （旧表已删、临时表又清掉），整段包进事务：失败即 ROLLBACK，连 DROP 一并撤销，原表数据完好。
     try {
+        $db->exec('BEGIN IMMEDIATE');
         $db->exec("CREATE TABLE \"{$temp}\" (\n  " . implode(",\n  ", $columns) . "\n)");
         $db->exec("INSERT INTO \"{$temp}\" ({$colNames}) SELECT {$colNames} FROM \"{$table}\"");
         $db->exec("DROP TABLE \"{$table}\"");
         $db->exec("ALTER TABLE \"{$temp}\" RENAME TO \"{$table}\"");
+        $db->exec('COMMIT');
     } catch (Throwable $e) {
+        mig_note_failure();
         error_log("MAPI upgrade: failed to rebuild {$table}: " . $e->getMessage());
+        @$db->exec('ROLLBACK');                                  // 撤销 DROP：原表恢复
         @$db->exec("DROP TABLE IF EXISTS \"{$temp}\"");
     }
 }
@@ -238,6 +254,8 @@ function apply_sqlite_indexes(SQLite3 $db, array $indexes): void {
                 try {
                     $db->exec('CREATE INDEX IF NOT EXISTS "' . $name . '" ON "' . $table . '" (' . $cols . ')');
                     $done = true;
+                    // 降级成功 ≠ 结构达标（唯一性没落实）→ 记一次失败，别让指纹把问题掩盖掉
+                    mig_note_failure();
                     error_log("MAPI upgrade (SQLite): {$table}.{$name} 唯一索引失败（可能有重复值），已降级为普通索引");
                 } catch (Throwable $e2) {
                     error_log("MAPI upgrade (SQLite): index {$table}.{$name} fallback failed: " . $e2->getMessage());
@@ -259,6 +277,7 @@ function sqlite_migration_skipped(SQLite3 $db, string $table, string $name): boo
 }
 
 function sqlite_migration_mark_skipped(SQLite3 $db, string $table, string $name): void {
+    mig_note_failure();                     // 有跳过项 → 本次不写结构指纹，保证下次仍会全量校验
     try {
         $key = SQLite3::escapeString('_mig_skip_' . $table . '_' . $name);
         if ((int)$db->querySingle("SELECT COUNT(*) FROM mapi_config WHERE config_key='{$key}'") > 0) {

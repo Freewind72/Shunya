@@ -12,7 +12,7 @@ if ($action_key === 'playlist-create') {
     $remoteId = trim($input['remote_id'] ?? '');
     $server = in_array($input['server'] ?? '', ['tencent', 'netease']) ? $input['server'] : 'netease';
     $coverUrl = trim($input['cover_url'] ?? '');
-    $coverMode = in_array($input['cover_mode'] ?? '', ['auto', 'url', 'first_song']) ? $input['cover_mode'] : 'auto';
+    $coverMode = in_array($input['cover_mode'] ?? '', ['auto', 'url', 'first_song', 'last_song']) ? $input['cover_mode'] : 'auto';
     if (!$kid || !$plName) { echo json_encode(['ok' => false, 'msg' => '参数不完整']); exit; }
     $ownerCheck = ($_SESSION['admin_is_admin'] ?? 99) <= 1
         ? $db->query("SELECT id FROM mapi_keys WHERE id=$kid")
@@ -108,7 +108,7 @@ if ($action_key === 'playlist-update') {
     $remoteId = trim($input['remote_id'] ?? '');
     $server = in_array($input['server'] ?? '', ['tencent', 'netease']) ? $input['server'] : 'netease';
     $coverUrl = trim($input['cover_url'] ?? '');
-    $coverMode = in_array($input['cover_mode'] ?? '', ['auto', 'url', 'first_song']) ? $input['cover_mode'] : 'auto';
+    $coverMode = in_array($input['cover_mode'] ?? '', ['auto', 'url', 'first_song', 'last_song']) ? $input['cover_mode'] : 'auto';
     if (!$pid || !$plName) { echo json_encode(['ok' => false, 'msg' => '参数不完整']); exit; }
     if (($_SESSION['admin_is_admin'] ?? 99) <= 1) {
         $stmt = $db->prepare("UPDATE mapi_playlists SET name=?, remote_id=?, server=?, cover_url=?, cover_mode=? WHERE id=?");
@@ -133,7 +133,7 @@ if ($action_key === 'playlist-update-cover') {
     csrf_require();
     $pid = (int)($input['id'] ?? 0);
     $coverUrl = trim($input['cover_url'] ?? '');
-    $coverMode = in_array($input['cover_mode'] ?? '', ['auto', 'url', 'first_song']) ? $input['cover_mode'] : 'auto';
+    $coverMode = in_array($input['cover_mode'] ?? '', ['auto', 'url', 'first_song', 'last_song']) ? $input['cover_mode'] : 'auto';
     if (!$pid) { echo json_encode(['ok' => false, 'msg' => '参数不完整']); exit; }
     if (($_SESSION['admin_is_admin'] ?? 99) <= 1) {
         $stmt = $db->prepare("UPDATE mapi_playlists SET cover_url=?, cover_mode=? WHERE id=?");

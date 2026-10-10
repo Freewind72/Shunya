@@ -70,3 +70,35 @@
 .cards-grid{grid-template-columns:1fr!important}
 .cards-grid>*{grid-row:auto!important;grid-column:auto!important}
 .tpl-list-grid{grid-template-columns:1fr!important}
+
+/* ── 封面本地化面板：标题栏开关 + 一行统计 + 一行按钮 + 紧凑卡片 ──
+   深色模式说明：base.css 没有定义 --ink/--line 这些变量（项目一直是 fallback + 逐类覆盖），
+   所以文字颜色必须再显式给一份深色值，否则是深底深字。 */
+.cov-sw{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:rgba(128,128,128,.85);cursor:pointer;user-select:none}
+.cov-sw input{margin:0}
+.cov-stat{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;line-height:1.7;color:rgba(128,128,128,.85)}
+.cov-stat b{color:rgba(0,0,0,.72);font-variant-numeric:tabular-nums}
+.cov-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px}
+.cov-hint{margin:-2px 0 8px;font-size:11.5px;color:#d9480f}
+
+/* 歌单卡片：一行「名称 …… 已本地化/总数」，下面一条细进度；跑完整张变绿 */
+.cover-pl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:6px;margin-top:10px}
+.cover-pl-card{padding:7px 9px;border-radius:9px;border:1px solid var(--line,rgba(0,0,0,.07));background:rgba(255,255,255,.3)}
+.cover-pl-card.done{border-color:rgba(40,200,64,.3);background:rgba(40,200,64,.06)}
+.cover-pl-head{display:flex;align-items:baseline;gap:6px}
+.cover-pl-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:600;color:rgba(0,0,0,.6)}
+.cover-pl-num{flex:none;font-size:11.5px;color:rgba(128,128,128,.75);font-variant-numeric:tabular-nums}
+.cover-pl-card.done .cover-pl-num{color:#28c840}
+.cover-pl-bar{margin-top:5px;height:3px;border-radius:3px;background:rgba(128,128,128,.18);overflow:hidden}
+.cover-pl-bar>i{display:block;height:100%;width:0;background:#6c5ce7;transition:width .2s}
+.cover-pl-card.done .cover-pl-bar>i{background:#28c840}
+
+[data-theme="dark"] .cov-sw{color:rgba(255,255,255,.52)}
+[data-theme="dark"] .cov-stat{color:rgba(255,255,255,.45)}
+[data-theme="dark"] .cov-stat b{color:rgba(255,255,255,.82)}
+[data-theme="dark"] .cov-hint{color:#ffa94d}
+[data-theme="dark"] .cover-pl-card{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.09)}
+[data-theme="dark"] .cover-pl-card.done{background:rgba(40,200,64,.1);border-color:rgba(40,200,64,.34)}
+[data-theme="dark"] .cover-pl-name{color:rgba(255,255,255,.74)}
+[data-theme="dark"] .cover-pl-num{color:rgba(255,255,255,.42)}
+[data-theme="dark"] .cover-pl-bar{background:rgba(255,255,255,.13)}

@@ -102,8 +102,12 @@ MP._css = '*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-colo
 '.songitem{display:flex;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;transition:all .15s;font-size:14px;font-weight:600;gap:8px;color:#333}'+
 '.songitem:hover{background:rgba(255,255,255,.3)}'+
 '.songitem.active{background:rgba(255,255,255,.35);font-weight:700}'+
+'.songitem.pending{opacity:.5}'+
+'.songitem.failed{opacity:.35}'+
 '.songitem .si-idx{color:#999;font-size:12px;font-weight:600;width:16px;text-align:right;flex-shrink:0}'+
 '.si-cover{width:32px;height:32px;border-radius:4px;object-fit:cover;flex-shrink:0;margin-right:6px}'+
+// 依次加载：还没解析出来的行，封面位写「加载」（失败写「失败」），与真图占同一格
+'.songitem.pending .si-cover,.songitem.failed .si-cover{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;line-height:1;color:#8a9099;background:rgba(127,127,127,.18)}'+
 '.songitem .si-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#333}'+
 '.songitem .si-artist{color:#999;font-size:12px;font-weight:600;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
 '.songitem.active .si-name{color:#1a1a2e;font-weight:700}'+

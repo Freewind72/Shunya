@@ -434,7 +434,15 @@ function cover_song_set($db, string $server, string $songId, int $keyId, string 
 function cover_song_unset($db, string $server, string $songId): void
 {
     $ref = $server . '_' . $songId;
-    $db->query("DELETE FROM mapi_song_covers WHERE song_ref='" . $db->real_escape_string($ref) . "'");
+    $refEsc = $db->real_escape_string($ref);
+    // 删索引行之前先记下它指向哪张图：删完要把对象的引用计数减回去。
+    // 歌单删除（handlers/playlists.php）与歌曲移除（handlers/songs.php）都汇到这里，
+    // 是唯一的收口点 —— 少了这一步，S3 里的图永远回收不掉、refs 也会越漂越脏。
+    $sha = '';
+    $r = $db->query("SELECT sha256 FROM mapi_song_covers WHERE song_ref='$refEsc'");
+    if ($r && $row = $r->fetch_assoc()) $sha = (string)($row['sha256'] ?? '');
+    $db->query("DELETE FROM mapi_song_covers WHERE song_ref='$refEsc'");
+    if ($sha !== '' && function_exists('cover_object_release')) cover_object_release($db, $sha);
 }
 
 /** 把 data URI 直接输出成图片响应（播放器取封面时命中数据库缓存就直接出图，不再回源） */

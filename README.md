@@ -99,6 +99,25 @@
 
 > 如果 `config/config.php` 已存在且配置正确，安装程序会自动跳过。
 
+### 生产环境必需的 PHP 设置
+
+安装完成后，请在 php.ini / php-fpm 池配置中确认以下两项。**开发机上开着它们很方便，直接搬到线上则是信息泄漏与性能问题。**
+
+| 设置 | 生产值 | 为什么 |
+|---|---|---|
+| `display_errors` | `0`（并配 `log_errors = 1`） | 报错会把绝对路径、SQL 片段、连接信息直接回给访客；只允许写日志 |
+| `xdebug.mode` | `off` | Xdebug 会显著拖慢执行，其错误输出还会暴露本地路径与源码行 |
+
+```ini
+; php.ini（生产）
+display_errors = 0
+log_errors     = 1
+xdebug.mode    = off
+```
+
+> `install/` 目录下的安装向导是**唯一**按需开启报错显示的地方：未安装时便于排错，
+> 安装完成后自动关闭（见 `install/includes/guard.php`）。这不替代上面的全局设置。
+
 ### PHP 内置服务器（快速测试）
 
 ```bash
@@ -130,6 +149,25 @@ php -S 127.0.0.1:8080 -t /path/to/Msapi
 > 原因：密钥放在标签属性上时**服务端读不到**，只有 URL 查询参数才可靠。
 > 老代码请改成上面那一行 —— 旧入口现在只会在控制台打印一句升级提示，不再提供播放器。
 
+#### 同页放多个播放器（必须显式区分）
+
+播放器的「重复执行保护」按**配置**去重，而不是按标签位置：同一个 `key` + 同一个 `api`
+（未指定 `data-player-id` 时）会派生出**同一个去重键**，于是同页第二个完全相同的
+`<script>` 会被判定为「这个播放器已经在跑了」而**静默跳过** —— 结果就是「第二个播放器不出现」。
+
+要让同页两个播放器共存，**必须给它们不同的 `data-player-id`**：
+
+```html
+<script src="https://your-domain.com/api.php?key=YOUR_API_KEY" data-player-id="bgm-a" defer></script>
+<script src="https://your-domain.com/api.php?key=YOUR_API_KEY" data-player-id="bgm-b" defer></script>
+```
+
+`data-player-id` 同时决定各自的 Cookie 命名空间，两个播放器的音量/进度/歌单记忆互不干扰。
+
+> 被去重跳过时，控制台会打印一条 `[Msapi]` 开头的 `console.info` 说明原因 ——
+> 这个行为本身是必要的（Swup / Pjax / Turbo 这类无刷新框架会重执行脚本，不能重建播放器），
+> 所以才用显式 `data-player-id` 来表达「我确实要两个」。
+
 ### 皮肤
 
 皮肤在后台「音乐配置 → 播放器皮肤」里选择，对该账号下所有密钥生效；
@@ -147,8 +185,7 @@ URL 上的 `?route=` 可临时覆盖。
 
 皮肤只负责 DOM 与样式；鉴权、播放内核、状态、歌词、歌单渲染由 `modules/core/` 统一提供。
 **新增皮肤 = 在 `modules/<name>/` 下建目录 + 写 `skin.json` + 写 `widget.js`（DOM 与 `MP._css`）
-与皮肤行为文件**，分发器与后台都会自动读到，不需要改任何代码 ——
-详见 [docs/skin-architecture.md](docs/skin-architecture.md) 与 [docs/player-2-design.md](docs/player-2-design.md)。
+与皮肤行为文件**，分发器与后台都会自动读到，不需要改任何代码。
 
 > **请务必加上 `defer`。** 这是一个第三方域名的脚本，不加 `defer` 时浏览器会停下来等它下载并执行完
 > 才继续解析页面，直接拖慢首屏；加上 `defer` 后它会在文档解析完成后执行，效果完全一致。

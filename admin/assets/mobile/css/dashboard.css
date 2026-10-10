@@ -17,6 +17,8 @@
 
 .log-list{max-height:360px;height:auto;overflow-y:auto;scrollbar-width:none;transition:max-height .45s cubic-bezier(.4,0,.2,1)}
 .log-list::-webkit-scrollbar{display:none}
+/* 调试模式开启时把记录区拉高，配合 dashboard.js 切换的 .debug-expanded */
+.card.debug-expanded .log-list{max-height:70vh}
 .log-item{padding:10px 0;border-bottom:1px solid rgba(0,0,0,.04)}
 .log-item:last-child{border-bottom:none}
 .log-row{display:flex;flex-direction:column;gap:4px}

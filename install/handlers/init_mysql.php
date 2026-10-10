@@ -37,7 +37,7 @@ try {
         stream_line('[清理] 无冗余');
     }
 
-    schema_sync_mysql($m);
+    schema_sync_mysql($m, true);        // 安装器是一次性动作：强制全量，不看结构指纹
     stream_line('[数据库] 表结构已同步（缺失的表 / 列 / 索引自动补齐）');
 
     $username = $input['username'] ?? 'admin';

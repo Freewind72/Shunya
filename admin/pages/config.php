@@ -1,4 +1,4 @@
-﻿<?php defined('MAPI_ADMIN') or die('禁止直接访问');
+<?php defined('MAPI_ADMIN') or die('禁止直接访问');
 $csrf = csrf_token();
 
 // 密钥列表（含用户信息）
@@ -68,7 +68,54 @@ if (!empty($keys)) {
       <input type="checkbox" name="autoplay_default" value="1"<?= $autoplayDefault ? ' checked' : '' ?>>
       自动播放
     </label>
+    <?php
+    // 歌词条字体：外部 URL 与上传的字体文件二选一（上传优先；填 URL 会替换掉上传的文件）
+    $s3ok = s3_available();
+    $lrcFont = lrc_font_get($db, (int)$_SESSION['admin_id']);
+    $lrcFontIsCss = ($lrcFont['effective'] !== '' && (bool)preg_match('/\.css(\?|#|$)/i', $lrcFont['effective']));
+    $lrcFontUploadedUrl = ($lrcFont['key'] !== '') ? $lrcFont['effective'] : '';
+    $lrcFontFamily = lrc_font_clean_name($lrcFont['name']);
+    if ($lrcFontFamily === '' && $lrcFont['effective'] !== '' && !$lrcFontIsCss) $lrcFontFamily = 'MsapiLrcFont';
+    $lrcFontSizeVal = ((int)$lrcFont['size'] > 0) ? (int)$lrcFont['size'] : '';
+    $lrcFontFallback = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif";
+    $lrcFontPreviewCss = ($lrcFontFamily !== '' ? "font-family:'" . htmlspecialchars($lrcFontFamily, ENT_QUOTES) . "'," . $lrcFontFallback . ';' : '')
+        . 'font-size:' . ($lrcFontSizeVal !== '' ? (int)$lrcFontSizeVal : 15) . 'px;';
+    ?>
+    <?php if ($lrcFont['effective'] !== '' && !$lrcFontIsCss): ?>
+    <style id="lrcFontPreviewStyle">@font-face{font-family:'<?= htmlspecialchars($lrcFontFamily !== '' ? $lrcFontFamily : 'MsapiLrcFont', ENT_QUOTES) ?>';src:url('<?= htmlspecialchars(lrc_font_clean_url($lrcFont['effective']), ENT_QUOTES) ?>');font-display:swap}</style>
+    <?php elseif ($lrcFont['effective'] !== ''): ?>
+    <link id="lrcFontPreviewLink" rel="stylesheet" href="<?= htmlspecialchars(lrc_font_clean_url($lrcFont['effective']), ENT_QUOTES) ?>">
+    <?php endif; ?>
+    <?php /* 与上面的主题 / 歌词开关用一条分割线隔开 */ ?>
+    <hr style="border:none;border-top:1px solid var(--line,rgba(0,0,0,.06));margin:10px 0 16px">
+    <div style="padding:2px 0 12px;font-size:13px;color:rgba(0,0,0,.5)">
+      <div style="margin-bottom:8px;font-weight:600">歌词条字体</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="lrcFontUrl" type="url" name="lrc_font_url" maxlength="500" placeholder="字体 URL（.woff2/.woff/.ttf/.otf 或 .css）"
+               value="<?= htmlspecialchars($lrcFont['url'], ENT_QUOTES) ?>"
+               style="flex:1 1 300px;min-width:200px;padding:7px 10px;border-radius:8px;border:1px solid var(--input-bd,rgba(128,128,128,.4));background:var(--input-bg,transparent);color:var(--ink,inherit)">
+        <button type="button" class="btn btn-sm" id="lrcFontUpload"<?= $s3ok ? '' : ' disabled title="未配置存储，只能填字体 URL"' ?>>上传字体</button>
+        <button type="button" class="btn btn-sm" id="lrcFontClear">清除</button>
+      </div>
+      <input type="file" id="lrcFontFile" accept=".woff2,.woff,.ttf,.otf" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none">
+      <input type="hidden" id="lrcFontUploaded" value="<?= htmlspecialchars($lrcFontUploadedUrl, ENT_QUOTES) ?>">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px">
+        <label style="display:flex;align-items:center;gap:6px">字体名
+          <input id="lrcFontName" type="text" name="lrc_font_name" maxlength="100" placeholder="如 汉仪文黑（可留空）" value="<?= htmlspecialchars($lrcFont['name'], ENT_QUOTES) ?>"
+                 style="width:170px;padding:6px 9px;border-radius:8px;border:1px solid var(--input-bd,rgba(128,128,128,.4));background:var(--input-bg,transparent);color:var(--ink,inherit)">
+        </label>
+        <label style="display:flex;align-items:center;gap:6px">字号
+          <input id="lrcFontSize" type="number" name="lrc_font_size" min="0" max="200" step="1" placeholder="默认" value="<?= $lrcFontSizeVal ?>"
+                 style="width:78px;padding:6px 9px;border-radius:8px;border:1px solid var(--input-bd,rgba(128,128,128,.4));background:var(--input-bg,transparent);color:var(--ink,inherit)"> px
+        </label>
+      </div>
+      <div id="lrcFontStatus" style="margin-top:6px;font-size:12px;color:var(--ink-soft,rgba(128,128,128,.75))"></div>
+      <div id="lrcFontPreview" style="margin-top:8px;padding:8px 10px;border-radius:8px;border:1px dashed rgba(128,128,128,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;<?= $lrcFontPreviewCss ?>">示例：风吹过山岗，歌词条的字体会长这样</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--ink-soft,rgba(128,128,128,.75))">上传与 URL 二选一，填了 URL 会替换掉上传的字体文件，点「清除」恢复默认字体。</div>
+    </div>
     <?php /* 初始位置已并入下面的「播放器皮肤」——每个皮肤各自记住自己的位置，不再全局共用一份 */ ?>
+    <?php /* 与上面的「歌词条字体」用一条分割线隔开 */ ?>
+    <hr style="border:none;border-top:1px solid var(--line,rgba(0,0,0,.06));margin:10px 0 16px">
     <div style="padding:2px 0 12px;font-size:13px;color:rgba(0,0,0,.5)">
       <div style="margin-bottom:8px;font-weight:600">播放器皮肤<span style="margin-left:6px;font-weight:400;font-size:12px;color:rgba(0,0,0,.42)">（该功能还在内测中）</span></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">

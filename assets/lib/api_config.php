@@ -58,3 +58,20 @@ function read_mapi_api_config($db, array $CFG): array
 
     return $config;
 }
+
+/**
+ * Redis 缓存配置读取器 —— mapi_config 表里 config_key='redis' 那行（JSON）。
+ * 只负责"读出来"，默认值与类型收敛在 admin/lib/redis.php 的 redis_conf() 里做，
+ * 避免同一个配置在两处各有一套默认值。
+ * 读不到（表/行不存在、JSON 坏了、库连不上）一律返回空数组 → 调用方回落默认值（关闭缓存）。
+ */
+function read_mapi_redis_config($db): array
+{
+    if (!$db) return [];
+    $r = $db->query("SELECT config_value FROM mapi_config WHERE config_key='redis'");
+    if (!$r) return [];
+    $row = $r->fetch_assoc();
+    if (!$row || !isset($row['config_value']) || $row['config_value'] === '') return [];
+    $saved = json_decode((string)$row['config_value'], true);
+    return is_array($saved) ? $saved : [];
+}

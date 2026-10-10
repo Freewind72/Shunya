@@ -16,7 +16,10 @@ function schema_parse(string $type = 'mysql'): array {
 
     $sql = (string)file_get_contents($file);
     $sql = preg_replace('/^\s*--.*$/m', '', $sql);
-    if (!preg_match_all('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?\s*\((.*?)\)\s*ENGINE\s*=/is', $sql, $m, PREG_SET_ORDER)) {
+    // 表定义有两种收尾写法：MySQL 是 ") ENGINE=…"，SQLite 是 ");"。**两种都要认** ——
+    // 只认 ENGINE= 时 sqlite.sql 会解析出 0 张表（静默返回空集），
+    // 参考副本就无法做一致性校验，将来若真按文件建表也会"什么都不建"。
+    if (!preg_match_all('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?\s*\((.*?)\)\s*(?:ENGINE\s*=|;)/is', $sql, $m, PREG_SET_ORDER)) {
         return $cache[$type] = $out;
     }
 
@@ -34,7 +37,10 @@ function schema_parse(string $type = 'mysql'): array {
                 $primary = schema_col_list($k[1]);
                 continue;
             }
-            if (preg_match('/^(UNIQUE\s+)?(?:KEY|INDEX)\s+`?(\w+)`?\s*\(([^)]*)\)/i', $def, $k)) {
+            // 索引定义必须"只有" KEY/INDEX 名(列清单)，后面不能再有别的东西：
+            // 否则 `key VARCHAR(64) NOT NULL DEFAULT ''`（列名正好叫 key、又没写反引号）会被
+            // 误判成"名为 VARCHAR、列为 64"的索引，那一列就被静默吃掉、同步永远不建它。
+            if (preg_match('/^(UNIQUE\s+)?(?:KEY|INDEX)\s+`?(\w+)`?\s*\(([^)]*)\)\s*$/i', $def, $k)) {
                 $indexes[$k[2]] = ['cols' => schema_col_list($k[3]), 'unique' => $k[1] !== ''];
                 continue;
             }

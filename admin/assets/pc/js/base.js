@@ -240,6 +240,15 @@ document.addEventListener('click',function(e){
   navigateTo(link.href);
 });
 
+document.addEventListener('click',function(e){
+  // 记住"最后点击的提交按钮"：new FormData(f) 按规范**不含**提交按钮的 name/value，
+  // 而 e.submitter 不是所有浏览器都有 —— 这里留个兜底，提交时补发按钮名。
+  var el=e.target;
+  if(!el||!el.closest)return;
+  var b=el.closest('button:not([type]),button[type="submit"],input[type="submit"]');
+  if(b&&b.name)window.__lastSubmitter=b;
+},true);
+
 document.addEventListener('submit',function(e){
   if(e.defaultPrevented)return;
   var f=e.target;
@@ -248,7 +257,11 @@ document.addEventListener('submit',function(e){
   var act=(f.getAttribute('action')||'').trim()||location.href;
   if(act.indexOf('?action=')===-1)return;
   e.preventDefault();
-  var btn=f.querySelector('[type="submit"],button:not([type]),button[type="submit"]');
+  // **提交按钮的 name/value 必须一起发**：后端大量分支是靠 isset($_POST['_xxx_submit']) 判断
+  // "用户点了哪个按钮"的，而 new FormData(f) 不含它 → 分支永远不跑、页面弹回旧值
+  //（实测踩到：Redis 卡的"保存"点了没反应、配置看着像回弹）。
+  var sub=e.submitter||window.__lastSubmitter||null;
+  var btn=(sub&&sub.form===f)?sub:f.querySelector('[type="submit"],button:not([type]),button[type="submit"]');
   var origTxt=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='保存中…'}
   var ow=document.querySelector('.wrap');
@@ -259,7 +272,9 @@ document.addEventListener('submit',function(e){
   // 不再在请求期间隐藏页面：等结果回来再切换，避免“点一下页面就消失、迟迟不回来”
   navPending(true);
   pausePlayerPreload();
-  fetch(f.action||location.href,{method:'POST',body:new FormData(f)})
+  var fd=new FormData(f);
+  if(sub&&sub.name)fd.append(sub.name,sub.value);      // ← 关键一行（缺失就是"保存回弹"）
+  fetch(f.action||location.href,{method:'POST',body:fd})
     .then(function(r){if(!r.ok)throw Error();var u=r.url;return r.text().then(function(h){return{html:h,url:u}})})
     .then(function(res){
       var doc=new DOMParser().parseFromString(res.html,'text/html');
@@ -337,8 +352,12 @@ initCodeMirror();
 
 (function(){
   var curUser = (document.querySelector('.sb-username') || {}).textContent || '';
-  var pusher = new Pusher('333723b6068a283d1b6b', { cluster: 'ap3', channelAuthorization: { endpoint: '?action=pusher-auth', transport: 'ajax' } });
-  var channel = pusher.subscribe('presence-admin-online');
+  // 凭据由服务端下发（window.MAPI_PUSHER，来源 config/config.php），不再硬编码在客户端。
+  // 未配置时直接不订阅：既避免空密钥调用 Pusher 报错，也省掉一次无用的鉴权请求。
+  var pc = window.MAPI_PUSHER || {};
+  if (!pc.key || typeof Pusher === 'undefined') return;
+  var pusher = new Pusher(pc.key, { cluster: pc.cluster, channelAuthorization: { endpoint: '?action=pusher-auth', transport: 'ajax' } });
+  var channel = pusher.subscribe(pc.channel || 'presence-admin-online');
 
   channel.bind('user-online', function(data) {
     if(data.username && data.username !== curUser) showFloatingToast(data.username + ' 上线了');

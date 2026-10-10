@@ -62,6 +62,9 @@
             }
             var lrcPill2 = document.querySelector('[data-mp="lrc"]');
             if (lrcPill2) lrcPill2.style.display = '';
+            // 藏起来这段时间引擎不量宽度（量了会把歌词条写成 42px 的小格），
+            // 显示回来必须立刻按当前行重排 —— 暂停时没有 timeupdate 可以等。
+            if (typeof MP.refreshLrc === 'function') MP.refreshLrc();
         }
     };
 
@@ -79,6 +82,8 @@
         if (tog) { tog.style.opacity = ''; tog.style.pointerEvents = ''; }
         var lrcPill = document.querySelector('[data-mp="lrc"]');
         if (lrcPill) lrcPill.style.display = '';
+        // 同 toggleImmersive 的退出分支：显示回来立刻重排歌词条宽度
+        if (typeof MP.refreshLrc === 'function') MP.refreshLrc();
         _restoreHostScroll();
         if (ov._touchHandler) {
             ov.removeEventListener('touchmove', ov._touchHandler);
@@ -129,6 +134,36 @@
         svg.innerHTML = icons[MP.mode] || icons.list;
     };
 
+    // 歌词字体（后台「音乐配置」里设的）。字号只有后台确实设了才覆盖（返回 0 = 没设，
+    // 保留皮肤自己的响应式字号），当前行比其它行大 2px —— 和皮肤原本 14 / 16 的字号节奏一致。
+    //
+    // 字体家族必须写到每一行上，不能只写容器：皮肤自带的 MP._css 里有一条
+    //   *{…font-family:-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif}
+    // 它是注入在 shadow root 里的通配规则，等于把字体「直接声明」在了每个元素上 —— 元素自己
+    // 有声明的字体时，父级的字体根本不会被继承（继承值只在该属性没有任何声明时才生效），
+    // 所以只设容器的话沉浸歌词一辈子都是那条通配规则的字体（实测行元素 computed
+    // font-family 一直是 -apple-system…，与此前「沉浸式字体不生效」的反馈完全一致）。
+    // 悬浮歌词条在 light DOM 里、没有这条通配规则，所以只设它自己就够了。
+    function _applyLrcFont(container) {
+        if (!container || typeof MP.lrcFontFamilyCss !== 'function') return;
+        var fam = MP.lrcFontFamilyCss();
+        if (container.style.fontFamily !== fam) container.style.fontFamily = fam;
+        var size = (typeof MP.lrcFontSize === 'function') ? MP.lrcFontSize() : 0;
+        for (var i = 0; i < container.children.length; i++) {
+            var el = container.children[i];
+            if (!el || !el.style) continue;
+            if (el.style.fontFamily !== fam) el.style.fontFamily = fam;
+            var isActive = (' ' + el.className + ' ').indexOf(' active ') >= 0;
+            var want = size > 0 ? (size + (isActive ? 2 : 0)) + 'px' : '';
+            if (el.style.fontSize !== want) el.style.fontSize = want;   // 每次 timeupdate 都会调到这里，值没变就别写
+        }
+    }
+
+    // 引擎在字体设置变化时调用（皮肤可选实现）
+    MP.onLrcFontChange = function() {
+        _applyLrcFont(MP.$('imLrc'));
+    };
+
     MP.updateImmersiveLrc = function() {
         var container = MP.$('imLrc');
         if (!container) return;
@@ -140,6 +175,7 @@
                     if (wrap) wrap.style.display = '';
                     container.innerHTML = '<div class="im-lrc-line active">\u6b64\u6b4c\u66f2\u4e3a\u6ca1\u6709\u586b\u8bcd\u7684\u7eaf\u97f3\u4e50\uff0c\u8bf7\u60a8\u6b23\u8d4f</div>';
                     container._lrcSig = '__placeholder__';
+                    _applyLrcFont(container);
                     return;
                 }
             } catch(e) {}
@@ -173,6 +209,8 @@
             else if (k === activeIdx - 1) cl += ' prev';
             container.children[k].className = cl;
         }
+        // 先上字体再算滚动位置：行高会随字号变，位置必须按最终行高来
+        _applyLrcFont(container);
 
         if (activeIdx >= 0) {
             var activeEl = container.children[activeIdx];

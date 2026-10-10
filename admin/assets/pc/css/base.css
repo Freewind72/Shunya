@@ -72,7 +72,7 @@ img.sidebar-logo{display:block;object-fit:contain;background:none}
 textarea.form-input{resize:vertical;min-height:80px;font-size:15px}
 select.form-input{appearance:none;-webkit-appearance:none;padding-right:16px;cursor:pointer}
 select.form-input::-ms-expand{display:none}
-.form-check{display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 0;font-size:13px;color:rgba(0,0,0,.5)}
+.form-check{display:flex;align-items:center;gap:10px;width:-webkit-fit-content;width:-moz-fit-content;width:fit-content;max-width:100%;cursor:pointer;padding:10px 0;font-size:13px;color:rgba(0,0,0,.5)}
 .form-check input[type=checkbox]{width:17px;height:17px;accent-color:rgba(0,0,0,.3)}
 .form-radio{display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-right:16px;font-size:13px;color:rgba(0,0,0,.5)}
 .form-radio input{accent-color:rgba(0,0,0,.3)}

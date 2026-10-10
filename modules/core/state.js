@@ -110,7 +110,7 @@
             k: MP._stateKey(),                                    // 命名空间
             pl: pl.pid || 0,                                      // 歌单 DB id（重排/改名都不变）
             pln: pl.name || '',                                   // 宿主页内联 config 没有 pid 时按名字兜底
-            rf: MP._songRef(a),                                   // 歌曲身份 server_songId
+            rf: MP._restorePendingRef || MP._songRef(a),          // 歌曲身份 server_songId；依次加载时记忆里那首还没到货，先别把它冲掉
             md: MP.mode || 'list',
             vl: (MP.ap.audio && typeof MP.ap.audio.volume === 'number')
                 ? Math.round(MP.ap.audio.volume * 100) / 100 : 1,
@@ -124,6 +124,8 @@
         try { _.setCookie(MP._cookieName('mapi_state'), JSON.stringify(st)); } catch (e) {}
         // 位置已并入 mapi_state；旧 cookie 只由默认实例写，避免多实例互相覆盖
         if (!_.INSTANCE_ID) { try { _.setCookie('mapi_pos', _pos); } catch (e) {} }
+        // 顺手同步一份到云端（防抖；服务端未启用/连不上时本次会话自动停手，不影响上面这份 cookie 记忆）
+        MP._cloudSyncSoon(st);
     };
 
     // 定时保存播放状态
@@ -153,7 +155,10 @@
             idx = parseInt(_.getCookie('mapi_song'), 10);
         }
         if (!isNaN(idx) && idx >= 0 && MP.ap && MP.ap.list && idx < MP.ap.list.audios.length) {
-            MP.ap.list.switch(idx);
+            try { MP.ap.list.switch(idx); } catch (e) {}       // 先把"当前曲目"指过去（高亮/歌词跟着它）
+            // 懒加载：这一首的播放地址可能还没取过 → 按需取；取到后 _syncPlayerList 会补一次 switch
+            // 把 src 装上（不强制 play，是否自动开播仍按自动播放规则来）
+            if (typeof MP._ensureSlotUrl === 'function') MP._ensureSlotUrl(MP.currentPlaylistIndex, idx, false);
         }
         if (vol !== undefined && vol !== null && vol !== '') {
             var v = parseFloat(vol);
@@ -238,6 +243,105 @@
             }
         } catch(e) {}
         return -1;
+    };
+
+    /* ── 设备标识 + 播放器状态云同步（Redis）──────────────────────────────
+       设备号由服务端下发：get-config 的 config.device，同时种 cookie `mapi_device`。
+       跨站嵌入时第三方 cookie 常被浏览器拦掉，所以这里**同时**把它镜像进 localStorage，
+       之后所有网关请求都追加 &dev= —— 服务端两条路都认（cookie 优先，其次 ?dev=）。
+
+       云同步是"锦上添花"，三条纪律：
+         1. **推送**：saveState 后防抖 3s 推一份（服务端按 IP+设备校验后落 Redis）
+         2. **恢复**：启动时拉一次，**只在本机没有任何状态时**才采用云端（避免和本地记忆打架）
+         3. **失败即退**：服务端明确回 disabled/unavailable → 本次会话不再重试；
+            网络错误一律忽略 —— 绝不能因为缓存服务影响播放与本地记忆
+    ─────────────────────────────────────────────────────────────────── */
+    MP._device = '';
+    MP._cloudStateOff = false;
+    MP._cloudTimer = null;
+
+    /** 记下服务端下发的设备号（或回落到 localStorage 里那份） */
+    MP._deviceInit = function (dev) {
+        dev = String(dev || '').toLowerCase();
+        if (/^[a-f0-9]{32,64}$/.test(dev)) {
+            MP._device = dev;
+            try { localStorage.setItem('mapi_device', dev); } catch (e) {}
+            return MP._device;
+        }
+        if (!MP._device) {
+            try {
+                var saved = String(localStorage.getItem('mapi_device') || '').toLowerCase();
+                if (/^[a-f0-9]{32,64}$/.test(saved)) MP._device = saved;
+            } catch (e) {}
+        }
+        return MP._device;
+    };
+
+    /** 所有网关请求都要带上的设备参数（没有设备号时返回空串，服务端会发新的） */
+    MP._devParam = function () {
+        return MP._device ? ('&dev=' + encodeURIComponent(MP._device)) : '';
+    };
+
+    MP._cloudToken = function () { return encodeURIComponent(_.API_TOKEN || _.API_KEY || ''); };
+
+    /** 把云端状态套用到播放器（仅在"本机没有状态"时走这里，所以不会和本地记忆打架） */
+    MP._applyCloudState = function (st) {
+        if (!st || MP._destroyed) return;
+        var idx = MP._audioIndexOf(st.rf);
+        if (typeof idx === 'number' && idx >= 0 && MP.ap && MP.ap.list && idx < MP.ap.list.audios.length) {
+            try { MP.ap.list.switch(idx); } catch (e) {}
+            if (typeof MP._ensureSlotUrl === 'function') MP._ensureSlotUrl(MP.currentPlaylistIndex, idx, false);
+        }
+        if (st.md && typeof MP.setMode === 'function') { try { MP.setMode(st.md); } catch (e) {} }
+        if (typeof st.vl === 'number' && MP.ap && MP.ap.audio) {
+            try { MP.ap.audio.volume = Math.max(0, Math.min(1, st.vl)); } catch (e) {}
+        }
+    };
+
+    /** 启动时拉一次云端状态：只在本地没有状态时才采用（cookie 丢了/换浏览器能接着听） */
+    MP._cloudPull = function () {
+        if (MP._cloudStateOff || MP._destroyed || !_.API_BASE) return;
+        var local = null;
+        try { local = MP._readState(); } catch (e) {}
+        if (local && local.rf) return;                       // 本机已经有记忆 → 不动它（云只是备份）
+        fetch(_.API_BASE + '?action=state-get&token=' + MP._cloudToken() + MP._devParam(), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || MP._destroyed) return;
+                if (d.device) MP._deviceInit(d.device);
+                if (!d.ok) {
+                    if (['disabled', 'unavailable', 'too_large', 'bad_device'].indexOf(d.reason) >= 0) MP._cloudStateOff = true;
+                    return;
+                }
+                var cs = d.state || {};
+                if (!cs.rf) return;                          // 云端没有有效状态
+                try { _.setCookie(MP._cookieName('mapi_state'), JSON.stringify(cs)); } catch (e) {}
+                MP._applyCloudState(cs);
+            })
+            .catch(function () {});
+    };
+
+    /** 防抖推送（saveState 会频繁触发，3s 一次即可） */
+    MP._cloudSyncSoon = function (st) {
+        if (MP._cloudStateOff || MP._destroyed || !st || !_.API_BASE) return;
+        if (MP._cloudTimer) clearTimeout(MP._cloudTimer);
+        MP._cloudTimer = setTimeout(function () {
+            MP._cloudTimer = null;
+            if (MP._cloudStateOff || MP._destroyed) return;
+            fetch(_.API_BASE + '?action=state-set&token=' + MP._cloudToken() + MP._devParam(), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'state=' + encodeURIComponent(JSON.stringify(st))
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                if (!d) return;
+                if (d.device) MP._deviceInit(d.device);      // 服务端换发新设备号（换网段/首次）时跟上
+                // 服务端明确说"这个功能没开/连不上/这类问题重试也没用"→ 本次会话停手，别空转重推
+                if (!d.ok && ['disabled', 'unavailable', 'too_large', 'bad_device', 'bad_state'].indexOf(d.reason) >= 0) {
+                    MP._cloudStateOff = true;
+                }
+            }).catch(function () {});
+        }, 3000);
     };
 
 })(window.__mapiPlayer);

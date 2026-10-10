@@ -19,7 +19,9 @@ $allowed = [
     'settings-site','settings-mail','settings-security','settings-api','settings-storage',
     'pk-begin','pk-complete','pk-delete',
     'bg-presign','bg-confirm','bg-url-save',
-    'pusher-auth','pusher-online-users','clear-logs',
+    'lrc-font-presign','lrc-font-confirm','lrc-font-clear',
+    'cover-local-toggle','cover-cache-status','cover-cache-run','cover-migrate-run','cover-gc-run',
+    'pusher-auth','pusher-online-users','clear-logs','debug-toggle',
     'logout',
 ];
 
@@ -66,6 +68,16 @@ $apiHandlers = [
     'bg-confirm'            => ['handlers/background.php', true],
     'bg-url-save'           => ['handlers/background.php', true],
 
+    'lrc-font-presign'      => ['handlers/lrc_font.php', true],
+    'lrc-font-confirm'      => ['handlers/lrc_font.php', true],
+    'lrc-font-clear'        => ['handlers/lrc_font.php', true],
+
+    'cover-local-toggle'    => ['handlers/covers.php', true],
+    'cover-cache-status'    => ['handlers/covers.php', true],
+    'cover-cache-run'       => ['handlers/covers.php', true],
+    'cover-migrate-run'     => ['handlers/covers.php', true],
+    'cover-gc-run'          => ['handlers/covers.php', true],
+
     'profile'              => ['handlers/profile.php', true],
     'config'               => ['handlers/config_user.php', true],
     'settings'             => ['handlers/settings.php', true],
@@ -79,6 +91,7 @@ $apiHandlers = [
     'pk-delete'            => ['handlers/passkeys.php', true],
 
     'clear-logs'           => ['handlers/system.php', true],
+    'debug-toggle'         => ['handlers/debug_toggle.php', true],
 ];
 
 // 页面模板映射（action => 页面文件）

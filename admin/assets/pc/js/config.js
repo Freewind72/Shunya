@@ -6,6 +6,130 @@
   var activeKeyId = 0;
   var dragGuardAt = 0;                 // 最近一次拖动的结束时间：拖动后的 click 不当作点击
 
+  // ═══ 歌词条字体（音乐配置）═══
+  // 只管预览、上传、清除；「换文件就删旧文件 / 填 URL 就删上传件」的判定都在服务端
+  // （handlers/lrc_font.php 与 handlers/config_user.php）
+  (function(){
+    var FALLBACK = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif";
+    var urlInput = document.getElementById('lrcFontUrl');
+    var preview = document.getElementById('lrcFontPreview');
+    if (!urlInput || !preview) return;          // 不是音乐配置页（或旧版页面）
+    var nameInput = document.getElementById('lrcFontName');
+    var sizeInput = document.getElementById('lrcFontSize');
+    var uploaded = document.getElementById('lrcFontUploaded');
+    var fileInput = document.getElementById('lrcFontFile');
+    var upBtn = document.getElementById('lrcFontUpload');
+    var clearBtn = document.getElementById('lrcFontClear');
+    var statusEl = document.getElementById('lrcFontStatus');
+    var upBtnDisabled = upBtn ? !!upBtn.disabled : true;   // 没配存储时服务端已禁用，别把它打开
+
+    function uploadedUrl() { return uploaded ? String(uploaded.value || '') : ''; }
+    function isCss(u) { return /\.css(\?|#|$)/i.test(String(u || '')); }
+    function cleanUrl(u) { return String(u || '').replace(/[\\'"()<>]/g, '').trim(); }
+    function cleanName(n) { return String(n || '').replace(/[^A-Za-z0-9 _\-\u4e00-\u9fa5]/g, '').trim(); }
+    function currentUrl() { return cleanUrl(urlInput.value) || uploadedUrl(); }
+    function family() {
+      var n = cleanName(nameInput ? nameInput.value : '');
+      if (n) return n;
+      var u = currentUrl();
+      return (u && !isCss(u)) ? 'MsapiLrcFont' : '';
+    }
+    function fontSize() {
+      var v = sizeInput ? parseInt(sizeInput.value, 10) : 0;
+      return (v > 0 && v <= 200) ? v : 15;
+    }
+    function setStatus(msg, bad) {
+      if (!statusEl) return;
+      statusEl.textContent = msg || '';
+      statusEl.style.color = bad ? '#ff5f57' : '';
+    }
+    function setFontFace(u, fam) {
+      var st = document.getElementById('lrcFontPreviewStyle');
+      if (!u || isCss(u) || !fam) { if (st && st.parentNode) st.parentNode.removeChild(st); return; }
+      if (!st) { st = document.createElement('style'); st.id = 'lrcFontPreviewStyle'; document.head.appendChild(st); }
+      st.textContent = "@font-face{font-family:'" + fam + "';src:url('" + u + "');font-display:swap}";
+    }
+    function setLink(u) {
+      var lk = document.getElementById('lrcFontPreviewLink');
+      if (!u || !isCss(u)) { if (lk && lk.parentNode) lk.parentNode.removeChild(lk); return; }
+      if (!lk) { lk = document.createElement('link'); lk.id = 'lrcFontPreviewLink'; lk.rel = 'stylesheet'; document.head.appendChild(lk); }
+      lk.href = u;
+    }
+    function refresh() {
+      var u = currentUrl(), fam = family();
+      setFontFace(u, fam);
+      setLink(u);
+      preview.style.fontFamily = fam ? ("'" + fam + "'," + FALLBACK) : '';
+      preview.style.fontSize = fontSize() + 'px';
+    }
+    function idleStatus() {
+      if (uploadedUrl()) setStatus('当前使用已上传的字体文件');
+      else if (urlInput.value) setStatus('当前使用外部字体 URL');
+      else setStatus('当前使用默认字体');
+    }
+    function post(action, data) {
+      return fetch('?action=' + action, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(function(r){ return r.json(); });
+    }
+    function upload(file) {
+      var m = /\.([a-z0-9]+)$/i.exec(file.name || '');
+      var ext = m ? m[1].toLowerCase() : '';
+      if (!/^(woff2|woff|ttf|otf)$/.test(ext)) { setStatus('只支持 .woff2 / .woff / .ttf / .otf 字体文件', true); return; }
+      if (file.size > 5 * 1024 * 1024) { setStatus('字体文件不能超过 5MB', true); return; }
+      if (upBtn) upBtn.disabled = true;
+      setStatus('正在上传…');
+      post('lrc-font-presign', { mime: file.type || '', ext: ext, _csrf: csrf }).then(function(d){
+        if (!d || !d.ok) throw new Error((d && d.error) || '生成上传签名失败');
+        return fetch(d.url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } })
+          .then(function(pr){
+            if (!pr.ok) throw new Error('直传存储失败（' + pr.status + '）');
+            return post('lrc-font-confirm', { key: d.key, _csrf: csrf });
+          });
+      }).then(function(d){
+        if (!d || !d.ok) throw new Error((d && d.error) || '保存字体失败');
+        if (uploaded) uploaded.value = d.url || '';
+        urlInput.value = '';                 // 上传优先：清掉 URL，服务端也把 URL 清了
+        setStatus('已上传：' + (file.name || '字体文件') + '（立即生效）');
+        refresh();
+      }).catch(function(e){
+        setStatus(e && e.message ? e.message : '上传失败', true);
+      }).then(function(){ if (upBtn) upBtn.disabled = upBtnDisabled; });
+    }
+
+    if (upBtn && fileInput) upBtn.addEventListener('click', function(){ fileInput.click(); });
+    if (fileInput) fileInput.addEventListener('change', function(){
+      var f = fileInput.files && fileInput.files[0];
+      fileInput.value = '';
+      if (f) upload(f);
+    });
+    if (clearBtn) clearBtn.addEventListener('click', function(){
+      if (!window.confirm('清除歌词条字体设置？已上传的字体文件会被删除。')) return;
+      clearBtn.disabled = true;
+      post('lrc-font-clear', { _csrf: csrf }).then(function(d){
+        if (!d || !d.ok) throw new Error((d && d.error) || '清除失败');
+        urlInput.value = '';
+        if (nameInput) nameInput.value = '';
+        if (sizeInput) sizeInput.value = '';
+        if (uploaded) uploaded.value = '';
+        setStatus('已恢复默认字体');
+        refresh();
+      }).catch(function(e){
+        setStatus(e && e.message ? e.message : '清除失败', true);
+      }).then(function(){ clearBtn.disabled = false; });
+    });
+    urlInput.addEventListener('input', function(){
+      if (cleanUrl(urlInput.value)) setStatus('当前使用外部字体 URL（保存后生效）');
+      else idleStatus();
+      refresh();
+    });
+    if (nameInput) nameInput.addEventListener('input', refresh);
+    if (sizeInput) sizeInput.addEventListener('input', refresh);
+    idleStatus();
+    refresh();
+  })();
+
   // 将弹窗移到 body 下, 使其 fixed 定位基于视口, 可覆盖侧边栏
   ['createModal', 'editRemoteModal'].forEach(function(id) {
     if (!document.querySelector('.wrap #' + id)) return;

@@ -78,12 +78,19 @@ if ($r) while ($row = $r->fetch_assoc()) $logs[] = $row;
   <div class="card-header">
     <span class="card-title">最近调用</span>
     <?php if (($_SESSION['admin_is_admin'] ?? 99) === 0): ?>
+    <div class="card-header-actions">
+    <label class="debug-switch" title="开启后「最近调用」不再过滤本机/本地调试产生的记录">
+      <input type="checkbox" id="debugToggle" data-csrf="<?= csrf_token() ?>"<?= $debugMode ? ' checked' : '' ?>>
+      <span class="debug-switch-slider"></span>
+      <span class="debug-switch-label">调试</span>
+    </label>
     <form method="post" action="?action=clear-logs" onsubmit="return confirm('确认清空所有调用记录？')" style="margin:0"><input type="hidden" name="_csrf" value="<?= csrf_token() ?>">
       <button class="btn-sm danger">清空记录</button>
     </form>
+    </div>
     <?php endif; ?>
   </div>
-  <div class="log-list">
+  <div class="log-list" id="logList">
   <?php if (empty($logs)): ?><div class="empty">暂无调用记录</div>
   <?php else: ?>
   <?php foreach ($logs as $log): ?>

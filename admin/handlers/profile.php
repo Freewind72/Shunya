@@ -21,8 +21,9 @@ if ($action_key === 'profile') {
 
     // 背景图删除
     if (isset($_POST['_bg_delete'])) {
-        $oldBg = $_SESSION['admin_background'] ?? '';
-        if ($oldBg) {
+        $oldBg = (string)($_SESSION['admin_background'] ?? '');
+        // 只删自己账号的对象（会话里的值来自用户回传的 key，没有归属校验就能借这里删别人的图）
+        if ($oldBg !== '' && upload_key_is_own($oldBg, 'backgrounds', $uid)) {
             s3_delete($oldBg);
         }
         $stmt = $db->prepare("UPDATE mapi_users SET background='',background_url='' WHERE id=?");

@@ -70,8 +70,27 @@ if ($action_key === 'config') {
     $oldSkin = '';
     $sr = $db->query("SELECT player_skin FROM mapi_users WHERE id=" . (int)$_SESSION['admin_id']);
     if ($sr && $srow = $sr->fetch_assoc()) $oldSkin = trim((string)($srow['player_skin'] ?? ''));
-    $stmt = $db->prepare("UPDATE mapi_users SET auto_theme=?, theme_mode=?, lyrics_default=?, autoplay_default=?, player_pos=?, player_skin=?, player_skin_cfg=? WHERE id=?");
-    $stmt->bind_param('isiisssi', $autoTheme, $themeMode, $lyricsDefault, $autoplayDefault, $playerPos, $playerSkin, $playerSkinCfg, $_SESSION['admin_id']);
+
+    // ═══ 歌词条字体（URL / 上传文件 / 字体名 / 字号）═══
+    // 只处理「用户在表单里填的那部分」：URL 填了并且和原来不同 = 换成了外部字体，
+    // 这时把之前上传的字体文件删掉；URL 留空则不动上传的文件（否则保存一下别的设置就把字体删了）。
+    // 真正的上传/替换/清除在 handlers/lrc_font.php。
+    $lrcFontUrl = lrc_font_clean_url(trim((string)($_POST['lrc_font_url'] ?? '')));
+    if ($lrcFontUrl !== '' && (strlen($lrcFontUrl) > 500 || !filter_var($lrcFontUrl, FILTER_VALIDATE_URL))) $lrcFontUrl = '';
+    $lrcFontName = lrc_font_clean_name((string)($_POST['lrc_font_name'] ?? ''));
+    $lrcFontName = function_exists('mb_substr') ? mb_substr($lrcFontName, 0, 100, 'UTF-8') : substr($lrcFontName, 0, 100);
+    $lrcFontSize = isset($_POST['lrc_font_size']) ? (int)$_POST['lrc_font_size'] : 0;
+    if ($lrcFontSize < 0 || $lrcFontSize > 200) $lrcFontSize = 0;
+    $curFont = lrc_font_get($db, (int)$_SESSION['admin_id']);
+    $lrcFontKey = $curFont['key'];
+    // 只在「这个对象确实是自己账号的」时候删——库里万一存着别人的 key，也不能借这里删掉
+    if ($lrcFontUrl !== '' && $lrcFontUrl !== $curFont['url'] && lrc_font_key_is_own($lrcFontKey, (int)$_SESSION['admin_id'])) {
+        s3_delete($lrcFontKey);
+        $lrcFontKey = '';
+    }
+
+    $stmt = $db->prepare("UPDATE mapi_users SET auto_theme=?, theme_mode=?, lyrics_default=?, autoplay_default=?, player_pos=?, player_skin=?, player_skin_cfg=?, lrc_font=?, lrc_font_url=?, lrc_font_name=?, lrc_font_size=? WHERE id=?");
+    $stmt->bind_param('isiissssssii', $autoTheme, $themeMode, $lyricsDefault, $autoplayDefault, $playerPos, $playerSkin, $playerSkinCfg, $lrcFontKey, $lrcFontUrl, $lrcFontName, $lrcFontSize, $_SESSION['admin_id']);
     if ($stmt->execute()) {
         $_SESSION['admin_auto_theme'] = $autoTheme;
         $_SESSION['admin_theme_mode'] = $themeMode;

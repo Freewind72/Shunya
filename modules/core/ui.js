@@ -202,6 +202,116 @@
         MP.updateProgress();
     };
 
+    // 自动滚动到「正在播放」那行，以及「用户正在自己挑歌」时的不打扰保护。
+    // 依次加载期间每批歌到货都会刷新一次列表：如果每次都滚回当前曲，用户根本翻不下去挑歌，
+    // 所以只有「真的换了歌」或「整表刚重建」（换歌单/切视图）时才自动滚动。
+    MP._lastRenderedRef = '';      // 上一帧显示的是哪首歌：只有它变了才算「换歌」
+    MP._listTouched = false;
+    MP._listTouchBound = false;
+    MP._bindListTouch = function() {
+        if (MP._listTouchBound) return;
+        MP._listTouchBound = true;
+        var inList = function(t) {
+            var els = [MP.$('slistInner'), MP.$('imSlistInner')];
+            for (var i = 0; i < els.length; i++) { if (els[i] && t && els[i].contains(t)) return true; }
+            return false;
+        };
+        ['pointerdown', 'touchstart', 'wheel', 'touchmove'].forEach(function(type){
+            document.addEventListener(type, function(e){ if (inList(e.target)) MP._listTouched = true; }, true);
+        });
+    };
+    MP._scrollActiveIfNeeded = function(els, curRef, force) {
+        if (!curRef) return;
+        if (!force) {
+            if (MP._listTouched) return;                    // 用户刚滚过/按过：别把他拽回来
+            if (curRef === MP._lastRenderedRef) return;      // 还是同一首：只是依次加载在刷新列表
+        }
+        els.forEach(function(el){
+            var activeEl = el.querySelector('.songitem.active');
+            if (activeEl && activeEl.scrollIntoView) activeEl.scrollIntoView({block:'nearest',behavior:'smooth'});
+        });
+    };
+    // 行状态（重建 HTML 与原地更新共用同一套判断）；state 为 ''/'pending'/'failed'
+    // 懒加载：'pending' 不再代表"正在加载"，而是"还没取过（点它才取）" —— 绝大多数行本来就该是这个状态
+    MP._rowState = function(s) { return s.url ? '' : (s._failed ? 'failed' : 'pending'); };
+    MP._songitemState = function(s, isSamePL, curRef) {
+        var active = (isSamePL && s.url && MP._songRef(s) === curRef) ? ' active' : '';
+        var state = MP._rowState(s);
+        var tip = state === 'failed' ? '\u52a0\u8f7d\u5931\u8d25\uff0c\u70b9\u51fb\u91cd\u8bd5'
+                : (state === 'pending' ? '\u70b9\u51fb\u64ad\u653e\uff08\u6309\u9700\u52a0\u8f7d\uff09' : '');
+        return { cls: 'songitem' + active + (state ? ' ' + state : ''), tip: tip, state: state };
+    };
+    // 封面位：排队中的行写「加载」（失败写「失败」），解析出封面后换成真图。
+    // 两种形态占同一格，行高与右侧文字的位置不随解析进度跳动。
+    //
+    // ⚠ 列表里几十上百行同时渲染时，**绝不能全部立刻加载**：
+    // 浏览器对同一域名只放 6 个并发，194 张图会排成 30 多轮，首屏被这些图拖住。
+    // loading="lazy" 让浏览器只取视口附近的那几张（其它滚到才取），decoding="async" 不阻塞排版。
+    MP._coverHtml = function(cov, state) {
+        // 封面优先：只要有封面就一定显示它（哪怕这一首还没取播放地址）——
+        // 懒加载只影响"播放地址什么时候取"，绝不该影响封面显示。
+        if (cov) {
+            MP._preconnectCover(cov);
+            return '<img class="si-cover" src="' + _.escapeHtml(cov) + '" alt="" loading="lazy" decoding="async">';
+        }
+        // 真没有封面时才用占位格：失败写「失败」，其余留空
+        return '<span class="si-cover">' + (state === 'failed' ? '\u5931\u8d25' : '') + '</span>';
+    };
+
+    // 封面域名预连接：图都在对象存储上（跨域），提前建好 DNS+TLS，首屏能省掉第一轮握手
+    MP._preconnectCover = function(url) {
+        try {
+            if (!url || !/^https?:\/\//i.test(url)) return;          // 相对地址＝本站，不用预连接
+            var host = String(url).replace(/^https?:\/\//i, '').split('/')[0];
+            if (!host || host === location.host) return;
+            if (!MP._preHosts) MP._preHosts = {};
+            if (MP._preHosts[host]) return;
+            MP._preHosts[host] = 1;
+            var head = document.head || document.documentElement;
+            if (!head) return;
+            var pre = document.createElement('link');
+            pre.rel = 'preconnect';
+            pre.href = location.protocol + '//' + host;
+            pre.crossOrigin = 'anonymous';
+            head.appendChild(pre);
+            var dns = document.createElement('link');
+            dns.rel = 'dns-prefetch';
+            dns.href = '//' + host;
+            head.appendChild(dns);
+        } catch (e) {}
+    };
+    MP._patchCover = function(item, cov, state) {
+        var el = item.querySelector('.si-cover');
+        if (!el) return;
+        // 封面优先：只要有封面就换成真图（未取播放地址不影响它）
+        var wantImg = !!cov;
+        if (wantImg !== (el.tagName === 'IMG')) {          // 占位格子与真图互换
+            var tmp = document.createElement('div');
+            tmp.innerHTML = MP._coverHtml(cov, state);
+            if (tmp.firstChild) el.parentNode.replaceChild(tmp.firstChild, el);
+            return;
+        }
+        if (wantImg) {
+            if (el.getAttribute('src') !== cov) el.setAttribute('src', cov);
+            return;
+        }
+        var txt = state === 'failed' ? '\u5931\u8d25' : (state ? '\u52a0\u8f7d' : '');
+        if (el.textContent !== txt) el.textContent = txt;
+    };
+    // 原地更新一行：不重建节点 → 保住滚动位置、悬停态和「按下还没松开」的那次点击
+    MP._patchSongitem = function(item, s, isSamePL, curRef) {
+        if (!item) return;
+        var st = MP._songitemState(s, isSamePL, curRef);
+        if (item.className !== st.cls) item.className = st.cls;
+        if (st.tip) { if (item.getAttribute('title') !== st.tip) item.setAttribute('title', st.tip); }
+        else if (item.hasAttribute('title')) item.removeAttribute('title');
+        var nm = item.querySelector('.si-name');
+        if (nm && nm.textContent !== (s.name || '')) nm.textContent = s.name || '';
+        var ar = item.querySelector('.si-artist');
+        if (ar && ar.textContent !== (s.artist || '')) ar.textContent = s.artist || '';
+        MP._patchCover(item, s.cover || s.pic || '', st.state);
+    };
+
     MP.renderSonglist = function() {
         var innerEls = [MP.$('slistInner'), MP.$('imSlistInner')].filter(function(e){return e;});
         if (innerEls.length === 0) return;
@@ -220,14 +330,17 @@
                 html += '<div class="pl-list-item" data-plidx="' + i + '">';
                 html += '<span class="pl-idx">' + (i + 1) + '</span>';
                 if (cover) {
-                    html += '<img class="pl-cover" src="' + _.escapeHtml(cover) + '" alt="" onerror="var s=document.createElement(\'span\');s.className=\'pl-cover\';s.style.cssText=\'display:flex;align-items:center;justify-content:center;font-size:10px;background:rgba(0,0,0,.06)\';s.textContent=\'' + _.escapeHtml(name.charAt(0)) + '\';this.parentNode.replaceChild(s,this)">';
+                    html += '<img class="pl-cover" src="' + _.escapeHtml(cover) + '" alt="" loading="lazy" decoding="async" onerror="var s=document.createElement(\'span\');s.className=\'pl-cover\';s.style.cssText=\'display:flex;align-items:center;justify-content:center;font-size:10px;background:rgba(0,0,0,.06)\';s.textContent=\'' + _.escapeHtml(name.charAt(0)) + '\';this.parentNode.replaceChild(s,this)">';
                 } else {
                     html += '<span class="pl-cover" style="display:flex;align-items:center;justify-content:center;font-size:10px">' + _.escapeHtml(name.charAt(0)) + '</span>';
                 }
                 html += '<span class="pl-name">' + _.escapeHtml(name) + '</span>';
                 var cnt;
                 if (MP._loadFailed[i]) cnt = '\u5931\u8d25';
-                else if (MP._allSongs[i]) cnt = MP._allSongs[i].length + '\u9996';
+                else if (MP._allSongs[i]) {
+                    // 懒加载：不再显示「已就绪/总数」（点哪首取哪首，绝大多数行本来就没取），只报曲目总数
+                    cnt = String(MP._allSongs[i].length) + '\u9996';
+                }
                 else if (MP._loadingPlaylists[i] || MP._preloadIdx === i) cnt = '\u52a0\u8f7d\u4e2d';
                 else cnt = '\u5f85\u52a0\u8f7d';
                 html += '<span class="pl-count">' + cnt + '</span>';
@@ -238,6 +351,8 @@
                 el.querySelectorAll('.pl-list-item').forEach(function(item){
                     item.addEventListener('click', function(e){
                         e.stopPropagation();
+                        // 用户主动翻歌单：启动流程不许再把他正在看的视图拽走（见 player.js loadInitialPlaylist）
+                        MP._userNavigated = true;
                         var plidx = parseInt(this.getAttribute('data-plidx'));
                         var showSongs = function(){
                             if (MP._destroyed) return;
@@ -267,6 +382,14 @@
         } else {
             var viewIdx = MP._viewingPlaylistIndex;
             var viewSongs = MP._allSongs[viewIdx] || [];
+            if (!MP.playlists || !MP.playlists[viewIdx]) {
+                // 引擎还没定下当前歌单（或下标已失效）：先显示加载态，别去自动拉取 ——
+                // 未知下标会被 loadPlaylistSongs 直接 resolve([])，回调和本函数互相调用会死循环
+                innerEls.forEach(function(el){
+                    el.innerHTML = '<div style="color:#999;font-size:13px;text-align:center;padding:20px 0">\u52a0\u8f7d\u4e2d\u2026</div>';
+                });
+                return;
+            }
             if (viewSongs.length === 0 && !MP._allSongs[viewIdx] && !MP._loadFailed[viewIdx]) {
                 // 歌单尚未加载过：显示加载态并自动拉取
                 innerEls.forEach(function(el){
@@ -294,56 +417,98 @@
                 return;
             }
             var isSamePL = MP._viewingPlaylistIndex === MP.currentPlaylistIndex;
-            var idx = MP.ap ? MP.ap.list.index : 0;
+            // 未解析的曲目也在 APlayer 列表里占位（url 为空），但「正在播放」仍按身份比对更稳
+            var _curAudio = (MP.ap && MP.ap.list && MP.ap.list.audios[MP.ap.list.index]) || null;
+            var curRef = _curAudio ? MP._songRef(_curAudio) : '';
+            MP._bindListTouch();
+            var _scope = 'songs:' + viewIdx;
             var html = '';
             for (var i = 0; i < viewSongs.length; i++) {
                 var s = viewSongs[i];
-                var active = (isSamePL && i === idx) ? ' active' : '';
-                html += '<div class="songitem' + active + '" data-idx="' + i + '">';
+                var _st = MP._songitemState(s, isSamePL, curRef);
+                // 还没解析出来的行：pending=加载中（点它优先加载）、failed=失败（点它重试）
+                html += '<div class="' + _st.cls + '" data-idx="' + i + '"' + (_st.tip ? ' title="' + _st.tip + '"' : '') + '>';
                 html += '<span class="si-idx">' + (i + 1) + '</span>';
-                var _cov = s.cover || s.pic || ''; if (_cov) html += '<img class="si-cover" src="' + _.escapeHtml(_cov) + '" alt="">';
+                var _cov = s.cover || s.pic || '';
+                // 封面位始终占住：排队中写「加载」，解析出封面就换成真图 → 行高与文字不跳
+                html += MP._coverHtml(_cov, _st.state);
                 html += '<span class="si-name">' + _.escapeHtml(s.name || '') + '</span>';
                 html += '<span class="si-artist">' + _.escapeHtml(s.artist || '') + '</span>';
                 html += '</div>';
             }
             innerEls.forEach(function(el){
+                // 同一歌单、行数没变 → 原地补内容，不重建 DOM。
+                // 整表重建会清掉用户滚到的位置、悬停态，以及「按下还没松开」的那次点击
+                //（节点被换掉后 mouseup 落在新节点上，click 不触发，点歌就像没反应）。
+                if (el.__mszScope === _scope && el.querySelectorAll('.songitem').length === viewSongs.length) {
+                    var items = el.querySelectorAll('.songitem');
+                    for (var pi = 0; pi < viewSongs.length; pi++) MP._patchSongitem(items[pi], viewSongs[pi], isSamePL, curRef);
+                    MP._scrollActiveIfNeeded([el], curRef, false);
+                    return;
+                }
                 el.innerHTML = html;
-                var activeEl = el.querySelector('.songitem.active');
-                if (activeEl) activeEl.scrollIntoView({block:'nearest',behavior:'smooth'});
+                el.__mszScope = _scope;
+                MP._bindSongitemClicks(el);
+                // 整表刚重建 = 用户自己切了歌单/视图（主动导航，不是被加载进度拽走）：
+                // 清掉触摸保护，再滚到正在播放那行（视图里没有正在播放的歌时自然什么也不滚）
+                MP._listTouched = false;
+                MP._scrollActiveIfNeeded([el], curRef, true);
+            });
+            MP._lastRenderedRef = curRef;   // 记下这一帧的身份：下一次只有真的换歌才自动滚动
+        }
+    };
+
+    // 行点击：绑定一次即可 —— 原地补丁不换节点，监听器一直有效；下标在点击时现场查表
+    MP._bindSongitemClicks = function(el) {
                 el.querySelectorAll('.songitem').forEach(function(item){
                     item.addEventListener('click', function(e){
                         e.stopPropagation();
                         var targetIdx = parseInt(this.getAttribute('data-idx'));
-                        var targetSongs = MP._allSongs[MP._viewingPlaylistIndex] || [];
+                        var viewIdx = MP._viewingPlaylistIndex;
+                        var targetSongs = MP._allSongs[viewIdx] || [];
                         var targetSong = targetSongs[targetIdx];
-                        if (!targetSong || !targetSong.url) return;
-                        if (MP._viewingPlaylistIndex !== MP.currentPlaylistIndex) {
-                            MP.currentPlaylistIndex = MP._viewingPlaylistIndex;
+                        if (!targetSong) return;
+                        // 用户主动点列表：之后的换歌可以再自动滚动（清掉触摸保护）
+                        MP._listTouched = false;
+                        if (!targetSong.url) {
+                            // 还没解析出来的行：点它 = 插到队首优先加载（失败的行 = 重试）
+                            MP._userPicked = true;
+                            if (viewIdx !== MP.currentPlaylistIndex) MP.switchPlaylist(viewIdx);
+                            MP._prioritizeSong(viewIdx, targetIdx);
+                            return;
+                        }
+                        MP._userPicked = true;
+                        if (viewIdx !== MP.currentPlaylistIndex) {
+                            MP.currentPlaylistIndex = viewIdx;
                             MP.songs = targetSongs;
                             MP._viewingPlaylist = false;
+                            MP._viewingPlaylistIndex = viewIdx;
+                            MP._restorePendingRef = '';
                             MP.saveState();
                             if (MP.ap) {
-                                MP.ap.list.clear();
-                                var audios = [];
-                                targetSongs.forEach(function(ts){
-                                    if (ts.url) audios.push({name:ts.name||'\u672a\u77e5', artist:ts.artist||'', url:ts.url, cover:ts.pic||'', _lrc:ts.lrc||''});
-                                });
-                                MP.ap.list.add(audios);
-                                MP.ap.list.switch(targetIdx);
+                                MP._rebuildApList(targetSongs, MP._songRef(targetSong));
                                 MP.ap.play();
                             } else {
+                                // 播放器还没建出来（加载期间就点进别的歌单点了歌）：先把「要播的那首」记下来，
+                                // initPlayer 收尾的 _resolvePendingPicks() 会切到它并开播 ——
+                                // 否则列表建好了却停在第一首，用户点了像没反应
+                                MP._pendingPlayRef = MP._songRef(targetSong);
+                                MP._pendingPlayIdx = viewIdx;
                                 MP.initPlayer(targetSongs);
                             }
                         } else {
-                            if (targetIdx === idx) return;
-                            try { MP.ap.list.switch(targetIdx); } catch(e) {}
+                            var pos = MP._audioIndexOf(MP._songRef(targetSong));
+                            if (pos < 0) {                       // APlayer 列表里还没有它：优先拉它
+                                MP._prioritizeSong(viewIdx, targetIdx);
+                                return;
+                            }
+                            if (!MP.ap || pos === MP.ap.list.index) return;
+                            try { MP.ap.list.switch(pos); } catch(e) {}
                             setTimeout(function(){ MP.onSwitch(); }, 150);
                         }
                         MP.renderSonglist();
                     });
                 });
-            });
-        }
     };
 
     MP._renderWithFade = function() {
@@ -375,24 +540,10 @@
     };
 
     MP.togglePanel = function() {
-        if (MP._loading) {
-            // 设计如此：歌单没有全部加载完成前不打开面板，悬浮按钮的呼吸动效就是加载提示
-            if (MP._toastEl && MP._toastEl.parentNode) return;
-            var toast = document.createElement('div');
-            toast.textContent = '\u6b63\u5728\u52a0\u8f7d\u2026';
-            toast.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%) scale(0.8);z-index:2147483647;background:rgba(0,0,0,.55);backdrop-filter:blur(16px)saturate(200%);color:#fff;font-size:14px;font-weight:600;padding:10px 20px;border-radius:10px;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;opacity:0;transition:all .3s cubic-bezier(.4,0,.2,1);pointer-events:none';
-            document.body.appendChild(toast);
-            MP._toastEl = toast;
-            void toast.offsetWidth;
-            toast.style.opacity = '1';
-            toast.style.transform = 'translateX(-50%) scale(1)';
-            setTimeout(function(){
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateX(-50%) scale(0.8)';
-                setTimeout(function(){ if (toast.parentNode) toast.parentNode.removeChild(toast); MP._toastEl = null; }, 300);
-            }, 2000);
-            return;
-        }
+        // 依次加载期间也允许打开面板。列表本身就是进度展示（歌单行写「加载中 / 已就绪 3/50」、
+        // 未解析的行写「加载」），用户想边加载边进别的歌单挑歌不该被拦。
+        // 这里原来在加载中直接 return 只弹一句「正在加载…」，结果歌没加载完就进不去任何歌单，
+        // 更别说点歌了 —— 加载提示仍由悬浮按钮的呼吸动效承担，不需要靠「不让进门」来表达。
         MP.open = !MP.open;
         var pnl = MP.$('panel');
         MP.$('overlay').style.display = MP.open ? 'block' : 'none';

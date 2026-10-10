@@ -45,10 +45,9 @@ function proxy_audio(string $url, string $ua): void {
     $url = preg_replace('/^http:/i', 'https:', $url);
 
     $respHeaders = [];
-    $rangeOffset = 0;
-    $rangeEnd = 0;
+    $rangeOffset = 0;          // 客户端要的起点：只用于「向上游要哪一段」
+    $rangeEnd = 0;             // 客户端要的终点（0 = 一直到结尾）
     $isRange = false;
-    $totalSize = 0;
 
     if (!empty($_SERVER['HTTP_RANGE'])) {
         if (preg_match('/bytes=(\d+)-(\d*)/', $_SERVER['HTTP_RANGE'], $m)) {
@@ -69,15 +68,17 @@ function proxy_audio(string $url, string $ua): void {
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_HEADERFUNCTION => function($ch, string $line) use (&$respHeaders): int {
             $len = strlen($line);
-            $parts = explode(':', $line, 2);
-            if (count($parts) === 2) {
-                $respHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
-            } elseif (preg_match('/^HTTP\//i', $line)) {
-                $respHeaders['_http'] = trim($line);
+            // 每来一轮新的状态行就把头清空：只认最后一轮。跳转链上前几轮的头若留在手里会被当成最终响应
+            //（302 自带的 Content-Length: 0 / Content-Range 一旦发出去，就又是「头与 body 不符」）
+            if (preg_match('/^HTTP\//i', $line)) {
+                $respHeaders = ['_http' => trim($line)];
+                return $len;
             }
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2) $respHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
             return $len;
         },
-        CURLOPT_WRITEFUNCTION => function($ch, string $data) use (&$respHeaders, &$isRange, &$rangeOffset, &$rangeEnd, &$totalSize): int {
+        CURLOPT_WRITEFUNCTION => function($ch, string $data) use (&$respHeaders): int {
             static $sent = false;
             if (!$sent) {
                 $sent = true;
@@ -89,19 +90,17 @@ function proxy_audio(string $url, string $ua): void {
                     http_response_code(502);
                     exit('upstream error: ' . $httpCode);
                 }
-                // 206 时 Content-Length 是分片大小，需从 Content-Range 取完整文件大小
-                $totalSize = (int)($respHeaders['content-length'] ?? 0);
-                if ($httpCode === 206 && preg_match('/bytes\s+\d+-\d+\/(\d+)/i', $respHeaders['content-range'] ?? '', $rm)) {
-                    $totalSize = (int)$rm[1];
+                // 这一段头只用来描述「紧接着要发出去的那段字节」，所以状态码与长度信息一律以上游**实际**
+                // 响应为准：上游可能完全不理会我们发的 Range（回 200 整文件），也可能自己更窄地切一段。
+                // 若还按客户端请求的区间去拼 Content-Range / Content-Length，声明与 body 就对不上 ——
+                // 浏览器按字节比例换算播放位置，进度就会从一个错误的位置开始（内容也可能整段错位）。
+                http_response_code($httpCode);
+                if ($httpCode === 206 && !empty($respHeaders['content-range'])) {
+                    header('Content-Range: ' . $respHeaders['content-range']);   // 原样透传，不自己算
                 }
-                if ($isRange && $totalSize > 0) {
-                    if ($rangeEnd <= 0) $rangeEnd = $totalSize - 1;
-                    http_response_code(206);
-                    header('Content-Range: bytes ' . $rangeOffset . '-' . $rangeEnd . '/' . $totalSize);
-                    header('Content-Length: ' . ($rangeEnd - $rangeOffset + 1));
-                } else {
-                    http_response_code(200);
-                    if ($totalSize > 0) header('Content-Length: ' . $totalSize);
+                // 上游给了长度才声明长度：宁可不声明（由连接关闭定界），也不能发一个对不上的长度
+                if (isset($respHeaders['content-length']) && ctype_digit($respHeaders['content-length'])) {
+                    header('Content-Length: ' . $respHeaders['content-length']);
                 }
                 header('Content-Type: ' . ($respHeaders['content-type'] ?? 'audio/mpeg'));
                 header('Cache-Control: no-cache, no-store, must-revalidate');
@@ -115,6 +114,7 @@ function proxy_audio(string $url, string $ua): void {
         },
     ]);
 
+    // 客户端要哪一段就向上游要哪一段；至于上游给不给、给多宽，看它自己（响应头以上游实际为准）
     if ($isRange) {
         curl_setopt($ch, CURLOPT_RANGE, $rangeOffset . '-' . ($rangeEnd > 0 ? $rangeEnd : ''));
     }

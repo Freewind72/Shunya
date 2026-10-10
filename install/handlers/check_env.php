@@ -1,7 +1,9 @@
 <?php
 
 $phpVersion   = PHP_VERSION;
-$phpOk        = version_compare(PHP_VERSION, '8.4.0', '>=');
+// 必须 8.5：全项目多处使用 PHP 8.5 才引入的 Uri\Rfc3986\Uri（音乐 API 解析上游地址），
+// 放行 8.4 会导致装完一碰音乐接口就 Class "Uri\Rfc3986\Uri" not found。
+$phpOk        = version_compare(PHP_VERSION, '8.5.0', '>=');
 $requiredExts = ['pdo', 'mbstring', 'openssl', 'fileinfo', 'gd', 'curl', 'xml'];
 $extStatus    = [];
 

@@ -262,7 +262,8 @@ MP._css = ''
 // ── 歌曲列表：固定尺寸（与曲目数量无关）+ 行样式 + 入场动画 ──
 // 尺寸用显式 height（不是 max-height），只跟视口有关：1 首和 200 首的面板一样大。
 + '.rs-modal{width:min(340px,88vw);height:min(520px,78vh);max-height:none}'
-// 行用 flex 而不是 grid —— 内核「无封面时不渲染 si-cover」，网格会因此错位。
+// 行用 flex 而不是 grid —— 未解析出封面时内核渲染的是空的 si-cover 占位框（避免行高与文字左右跳），
+// 空框在 flex 下按基尺寸(34px)占位，网格列宽则会被「有内容/没内容」带偏。
 + '.rs-modal-body .songitem,.rs-modal-body .pl-list-item{display:flex;align-items:center;gap:9px;'
   + 'padding:7px 9px;border-radius:9px;cursor:pointer;position:relative;'
   + 'transition:background .16s ease,transform .16s ease}'
@@ -286,6 +287,9 @@ MP._css = ''
 // 播放中：玫瑰高亮，序号位换成跳动的音柱（不是多加一列）
 + '.rs-modal-body .songitem.active{background:linear-gradient(90deg,rgba(194,24,91,.42),rgba(194,24,91,.12))}'
 + '.rs-modal-body .songitem.active .si-name{font-weight:700;opacity:1}'
+// 依次加载：还没解析出来的行（pending 加载中 / failed 失败），点了会优先加载或重试
++ '.rs-modal-body .songitem.pending{opacity:.5}'
++ '.rs-modal-body .songitem.failed{opacity:.35}'
 + '.rs-modal-body .songitem.active .si-idx{color:transparent;font-size:0}'
 + '.rs-modal-body .songitem.active .si-idx::before,.rs-modal-body .songitem.active .si-idx::after{'
   + 'content:"";position:absolute;left:50%;bottom:50%;width:3px;border-radius:2px;background:#ff7fb0;'
@@ -434,6 +438,10 @@ MP._css = ''
   // 内核的「加载中/无歌曲/加载失败」是内联 font-size:13px，只能 important 覆盖
   + '.rs-modal-body>div[style*="color:#999"]{font-size:20px!important}'
   + '.rs-modal-body .pl-retry{font-size:20px!important}'
-+ '}';
++ '}'
+// 依次加载：还没解析出来的行，封面位写「加载」（失败写「失败」）。放在媒体查询之后，
+// 且用 .songitem.pending 提高优先级 → 大布局里 17px 的封面字号不会把它撑爆
++ '.rs-modal-body .songitem.pending .si-cover,.rs-modal-body .songitem.failed .si-cover'
++ '{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;line-height:1;color:rgba(255,255,255,.62);object-fit:unset}';
 
 })(window.MP);

@@ -25,6 +25,7 @@ if (!empty($_SESSION['admin_id'])) {
 
 // 加载核心库文件
 require __DIR__ . '/../lib/cover_cache.php';
+require __DIR__ . '/../lib/cover_store.php';       // 封面本地化（内容寻址 → S3）
 require __DIR__ . '/../../assets/lib/api_config.php';
 require __DIR__ . '/../../assets/lib/helpers.php';
 require __DIR__ . '/../lib/helpers.php';
@@ -33,6 +34,7 @@ require __DIR__ . '/../lib/auth.php';
 require __DIR__ . '/../lib/mail.php';
 require __DIR__ . '/../lib/webauthn.php';
 require __DIR__ . '/../lib/s3.php';
+require __DIR__ . '/../lib/redis.php';               // 播放器数据缓存（纯 PHP RESP；未启用/连不上时全部退化为未命中）
 require __DIR__ . '/../lib/pusher.php';
 require __DIR__ . '/../lib/upstream_api.php';
 require __DIR__ . '/../lib/upstream_snapshot.php';

@@ -1,6 +1,9 @@
 -- 表结构唯一来源；变更方式与注意事项见 install/schema.md
 
 -- mapi_users
+-- 早期 1.6.x 的库把 id 建成了有符号 INT，与下面的声明不一致（增量系统只补列、不改类型），
+-- 这里按声明对齐一次；md5 记在 mapi_config._schema_def_mapi_users.id，之后不会重复执行。
+-- @modify mapi_users.id INT UNSIGNED NOT NULL AUTO_INCREMENT
 CREATE TABLE IF NOT EXISTS `mapi_users` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `username` VARCHAR(50) NOT NULL,
@@ -16,6 +19,10 @@ CREATE TABLE IF NOT EXISTS `mapi_users` (
     `player_pos` VARCHAR(24) DEFAULT '',
     `player_skin` VARCHAR(32) DEFAULT '',
     `player_skin_cfg` VARCHAR(1000) DEFAULT '{"rose":{"pos":"left:88"},"router":{"pos":"right:80"}}',
+    `lrc_font` VARCHAR(500) DEFAULT '',
+    `lrc_font_url` VARCHAR(500) DEFAULT '',
+    `lrc_font_name` VARCHAR(100) DEFAULT '',
+    `lrc_font_size` INT DEFAULT 0,
     `background` VARCHAR(500) DEFAULT '',
     `background_url` VARCHAR(500) DEFAULT '',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -161,15 +168,42 @@ CREATE TABLE IF NOT EXISTS `mapi_playlists` (
     KEY `idx_key_id` (`key_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 歌曲封面索引：一首歌一行，指向封面对象（S3）或历史遗留的 base64。
+-- cover_data 是旧实现（图直接塞库），封面本地化后迁到 S3 并清空，只留 sha256 / object_key。
 CREATE TABLE IF NOT EXISTS `mapi_song_covers` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `song_ref` VARCHAR(191) NOT NULL DEFAULT '',
     `key_id` INT NOT NULL DEFAULT 0,
     `cover_url` VARCHAR(500) DEFAULT '',
     `cover_data` MEDIUMTEXT,
+    `sha256` CHAR(64) NOT NULL DEFAULT '',
+    `object_key` VARCHAR(255) NOT NULL DEFAULT '',
+    `bytes` INT NOT NULL DEFAULT 0,
+    `mime` VARCHAR(40) NOT NULL DEFAULT '',
     `updated_at` DATETIME DEFAULT NULL,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uniq_song_covers_ref` (`song_ref`)
+    UNIQUE KEY `uniq_song_covers_ref` (`song_ref`),
+    KEY `idx_song_covers_sha` (`sha256`),
+    KEY `idx_song_covers_obj` (`object_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 封面对象表（内容寻址）：一图一行，主键就是图片内容的 sha256。
+-- 存放路径 covers/<sha 前 2 位>/<sha256>.<ext>：不同歌单、不同歌曲只要图片一样就命中同一行，
+-- 永远只上传一份 —— 这就是"按 sha256 去重调度"。mapi_song_covers 负责"哪首歌用哪张"。
+-- refs 是引用计数（多少首歌指向它）；减到 0 时记下 orphaned_at（没人用了），
+-- 后台「清理无用封面」按保留期回收 —— 留一段宽限期是故意的：
+-- 歌单删了又加回来时，同一张图还能直接复用，不必再回源抓一次。
+CREATE TABLE IF NOT EXISTS `mapi_cover_objects` (
+    `sha256` CHAR(64) NOT NULL DEFAULT '',
+    `object_key` VARCHAR(255) NOT NULL DEFAULT '',
+    `bytes` INT NOT NULL DEFAULT 0,
+    `mime` VARCHAR(40) NOT NULL DEFAULT '',
+    `refs` INT NOT NULL DEFAULT 0,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `orphaned_at` DATETIME DEFAULT NULL,
+    PRIMARY KEY (`sha256`),
+    KEY `idx_cover_obj_key` (`object_key`),
+    KEY `idx_cover_obj_orphan` (`refs`, `orphaned_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `mapi_songs` (

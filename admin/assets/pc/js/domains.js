@@ -152,7 +152,13 @@
       var btn = $('#domSubmit');
       if (btn) btn.disabled = true;
 
-      fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin' })
+      // new FormData(form) 不含"提交按钮"的 name/value —— 后端若靠它判断动作就会落空，
+      // 这里按规范补上（e.submitter 为现代浏览器标准字段）
+      var fd = new FormData(form);
+      var sub = e.submitter || window.__lastSubmitter || null;
+      if (sub && sub.name) fd.append(sub.name, sub.value);
+
+      fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (j) {
           if (j && j.ok) {

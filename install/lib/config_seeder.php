@@ -247,6 +247,25 @@ EOT;
             'body' => $tplBody,
             'html' => true,
         ], JSON_UNESCAPED_UNICODE),
+        // Redis 播放器缓存：默认关闭。字段名与 admin/lib/redis.php 的 redis_default_config() 一一对应，
+        // 管理员在「设置 → 储存 → Redis 缓存」里改；老库缺这行时也会在这里补上（增量系统会跑播种）。
+        'redis' => json_encode([
+            'enabled'     => false,
+            'host'        => '127.0.0.1',
+            'port'        => 6379,
+            'password'    => '',
+            'database'    => 0,
+            'prefix'      => 'mapi:',
+            'default_ttl' => 600,
+            'timeout'     => 2,
+            'ttl_url'     => 300,
+            'ttl_lrc'     => 604800,
+            'ttl_pic'     => 604800,
+            'ttl_cfg'     => 60,
+            'ttl_state'   => 2592000,
+            'strict_ip'   => 1,
+            'ip_grace'    => 86400,
+        ], JSON_UNESCAPED_UNICODE),
     ];
 
     try {

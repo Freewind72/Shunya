@@ -33,13 +33,17 @@ function playlist_detail_load($db, array $cfg, array $session, array $request): 
     $rServer  = $cfg['api']['param_server'] ?? 'server';
     $rType    = $cfg['api']['param_type'] ?? 'type';
 
-    // 读取歌曲封面缓存
+    // 读取歌曲封面缓存：优先「已本地化」的 S3 直链（内容寻址），其次库里那份历史 base64，
+    // 都没有才回落到上游取图地址 —— 迁移到 S3 之后这里不能再依赖 base64。
     $covers = cover_songs_load($db, $songs);
+    $s3Covers = function_exists('cover_song_urls') ? cover_song_urls($db, $songs) : [];
 
     // 组装每首歌的输出数据
     $rows = [];
     foreach ($songs as $song) {
-        $pic = $covers[$song['server'] . '_' . $song['song_id']] ?? '';
+        $ref = $song['server'] . '_' . $song['song_id'];
+        $pic = $covers[$ref] ?? '';
+        if ($pic === '') $pic = $s3Covers[$ref] ?? '';
         if ($pic === '' && $apiBase !== '' && $song['song_id'] !== '') {
             $pic = $apiBase . '?' . http_build_query([$rServer => $song['server'], $rType => 'pic', $pId => $song['song_id']]);
         }

@@ -5,13 +5,24 @@ function csrf_token() {
 }
 function csrf_require() {
     $t = $_POST['_csrf'] ?? '';
-    if (!$t || !hash_equals($_SESSION['csrf_token'] ?? '', $t)) {
+    if ($t && hash_equals($_SESSION['csrf_token'] ?? '', $t)) return;
+
+    // 失败时：接口/JSON 调用照旧 403（前端能拿到 JSON 处理）；
+    // 但**普通表单**改成"带提示跳回原页" —— 用户看到一页光秃秃的「CSRF 验证失败」
+    // 只会以为"保存坏了/页面过期就是不让存"，不知道该怎么办（也解释不了"保存没生效"）。
+    $json = stripos((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''), 'xmlhttprequest') !== false
+         || stripos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false
+         || stripos((string)($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json') !== false;
+    if ($json) {
         http_response_code(403);
-        if (strpos(implode('', headers_list()), 'application/json') !== false) {
-            die(json_encode(['ok' => false, 'msg' => 'CSRF 验证失败']));
-        }
-        die('CSRF 验证失败');
+        die(json_encode(['ok' => false, 'msg' => 'CSRF 验证失败']));
     }
+    if (function_exists('flash_set')) {
+        flash_set('err', '页面已过期（CSRF 校验未通过）：你这次的改动**没有**写入，请刷新页面后重新保存。');
+    }
+    http_response_code(303);
+    header('Location: ?action=' . urlencode((string)($_GET['action'] ?? '')));
+    exit;
 }
 
 function login_rl(): void {

@@ -143,14 +143,16 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
 <?php endif; ?>
 <link rel="stylesheet" href="<?= $RELAY['cm']['core_css'] ?>">
 <link rel="stylesheet" href="<?= $RELAY['cm']['theme_monokai'] ?>">
+<?php if (pusher_enabled()): ?>
 <script src="<?= $RELAY['sdk']['pusher_js'] ?>"></script>
+<?php endif; ?>
 <script src="<?= $RELAY['cm']['core_js'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_xml'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_css'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_js'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_html'] ?>"></script>
 <script src="<?= $RELAY['cm']['addon_activeline'] ?>"></script>
-<script>window.RELAY=<?= json_encode($RELAY['asset']) ?>;window.__mapiPrefetchConcurrency=<?= (strpos((string)($_SERVER['SERVER_SOFTWARE'] ?? ''), 'Development Server') !== false) ? 1 : 3 ?>;</script>
+<script>window.RELAY=<?= json_encode($RELAY['asset']) ?>;window.MAPI_PUSHER=<?= json_encode(['key' => PUSHER_KEY, 'cluster' => PUSHER_CLUSTER, 'channel' => PUSHER_CHANNEL]) ?>;window.__mapiPrefetchConcurrency=<?= (strpos((string)($_SERVER['SERVER_SOFTWARE'] ?? ''), 'Development Server') !== false) ? 1 : 3 ?>;</script>
 </head>
 <body data-device="<?= $isMobile ? 'mobile' : 'pc' ?>" data-theme="<?= $adminUiTheme ?>" style="<?= $bgStyle ?>">
 <?php if ($bgVideoUrl): ?>
