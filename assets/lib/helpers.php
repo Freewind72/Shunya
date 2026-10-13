@@ -186,3 +186,39 @@ if (!function_exists('asset_ver')) {
         return $path . (strpos($path, '?') === false ? '?' : '&') . 'v=' . filemtime($local);
     }
 }
+
+/**
+ * JWT 签名密钥 —— 全站唯一来源。
+ *
+ * 只认 config/config.php 的 api.jwt_secret，且要求 ≥32 字符。
+ * 缺失或过短时**抛异常**，绝不回退到 hash('sha256', db_password . site_url)：
+ * 那种回退把签名密钥的熵压缩成数据库密码的熵 —— 拖库即可伪造任意 token。
+ *
+ * 生成方式：php -r "echo bin2hex(random_bytes(32));"
+ * 安装器（install/handlers/init_mysql.php / init_sqlite.php）会自动生成。
+ *
+ * @param array|null $cfg 已加载的配置数组；不传则自行 require config/config.php
+ */
+if (!function_exists('jwt_secret')) {
+    function jwt_secret(?array $cfg = null): string
+    {
+        static $cached = null;
+        if ($cached !== null) return $cached;
+
+        if ($cfg === null) {
+            $cfgFile = dirname(__DIR__, 2) . '/config/config.php';
+            $cfg = is_file($cfgFile) ? require $cfgFile : [];
+            if (!is_array($cfg)) $cfg = [];
+        }
+
+        $secret = trim((string)($cfg['api']['jwt_secret'] ?? ''));
+        if (strlen($secret) < 32) {
+            throw new RuntimeException(
+                'config/config.php 的 api.jwt_secret 缺失或过短（需 ≥32 字符，当前 ' . strlen($secret) . ' 个）。'
+                . '生成命令：php -r "echo bin2hex(random_bytes(32));"'
+                . ' —— 拒绝回退到由数据库密码派生的弱密钥。'
+            );
+        }
+        return $cached = $secret;
+    }
+}

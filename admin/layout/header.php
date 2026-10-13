@@ -79,7 +79,7 @@ function formatBytes($b) {
 }
 
 $adminPlayerToken = '';
-$jwtSecret = $cfg['api']['jwt_secret'] ?? hash('sha256', ($cfg['db']['password'] ?? '') . ($cfg['site']['url'] ?? ''));
+$jwtSecret = jwt_secret($cfg);   // 缺失/过短会抛异常，不再回退到弱密钥
 if (!empty($db) && empty($db->connect_error) && empty($db->_error)) {
     $r = $db->query("SELECT api_key FROM mapi_keys WHERE status=1 ORDER BY id ASC LIMIT 1");
     if ($r && $row = $r->fetch_assoc()) {

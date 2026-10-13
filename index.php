@@ -17,7 +17,7 @@ require __DIR__ . '/assets/lib/helpers.php';   // asset_ver()：静态资源版�
 $RELAY = require __DIR__ . '/admin/api/relay.php';
 $totalCalls = 0; $todayCalls = 0;
 $superKey = ''; $superToken = '';
-$jwtSecret = $CFG['api']['jwt_secret'] ?? hash('sha256', ($CFG['db']['password'] ?? '') . ($CFG['site']['url'] ?? ''));
+$jwtSecret = jwt_secret($CFG);   // 缺失/过短会抛异常，不再回退到弱密钥
 $statDb = db_connect();
 if ($statDb) {
     try {
@@ -26,12 +26,21 @@ if ($statDb) {
         $today = date('Y-m-d');
         $r = $statDb->query("SELECT COUNT(*) as c FROM mapi_logs WHERE DATE(created_at)='$today'");
         if ($r) $todayCalls = (int)$r->fetch_assoc()['c'];
-        $skStmt = $statDb->query("SELECT api_key FROM mapi_keys WHERE status=1 ORDER BY id ASC LIMIT 1");
-        if ($skStmt) {
-            $skRow = $skStmt->fetch_assoc();
-            if ($skRow) {
-                $superKey = $skRow['api_key'];
-                $superToken = jwt_encode(['key' => $superKey, 'exp' => time() + 900, 'iat' => time()], $jwtSecret);
+        // 演示播放器专用密钥：**只认 config 的 api.demo_key**，不再取「库里第一条启用密钥」。
+        // 这条密钥会被拼进页面 HTML 下发给所有访客，所以绝不能是站长正式密钥；
+        // 留空 = 不显示演示播放器（安全默认值）。仍要求它在 mapi_keys 里真实启用，否则不发令牌。
+        $demoKey = trim((string)($CFG['api']['demo_key'] ?? ''));
+        if ($demoKey !== '') {
+            $dkStmt = $statDb->prepare("SELECT api_key FROM mapi_keys WHERE api_key=? AND status=1 LIMIT 1");
+            if ($dkStmt) {
+                $dkStmt->bind_param('s', $demoKey);
+                $dkStmt->execute();
+                $dkRes = $dkStmt->get_result();
+                $dkRow = $dkRes ? $dkRes->fetch_assoc() : null;
+                if ($dkRow) {
+                    $superKey = $dkRow['api_key'];
+                    $superToken = jwt_encode(['key' => $superKey, 'exp' => time() + 900, 'iat' => time()], $jwtSecret);
+                }
             }
         }
     } catch(Exception $e) { $totalCalls = 0; $todayCalls = 0; }

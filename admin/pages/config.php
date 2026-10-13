@@ -34,7 +34,7 @@ $searchToken = '';
 if (!empty($keys)) {
     $firstKey = $keys[0]['api_key'] ?? '';
     if ($firstKey) {
-        $jwtSecret = $cfg['api']['jwt_secret'] ?? hash('sha256', ($cfg['db']['password'] ?? '') . ($cfg['site']['url'] ?? ''));
+        $jwtSecret = jwt_secret($cfg);   // 缺失/过短会抛异常，不再回退到弱密钥
         $searchToken = jwt_encode(['key' => $firstKey, 'exp' => time() + 300, 'iat' => time()], $jwtSecret);
     }
 }

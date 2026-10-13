@@ -18,10 +18,12 @@ $_current_api_key = '';
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 $CFG = require __DIR__ . '/../../config/config.php';
-$jwt_secret = $CFG['api']['jwt_secret'] ?? hash('sha256', ($CFG['db']['password'] ?? '') . ($CFG['site']['url'] ?? ''));
 require __DIR__ . '/../../assets/lib/db.php';
 require __DIR__ . '/../../assets/lib/api_config.php';
 require __DIR__ . '/../../assets/lib/helpers.php';
+// 签名密钥：统一走 jwt_secret()。必须在 helpers.php 之后才能调用；
+// 缺失/过短时抛异常，不再回退到 hash('sha256', db_password . site_url) 那种弱密钥。
+$jwt_secret = jwt_secret($CFG);
 require __DIR__ . '/../lib/cover_cache.php';      // 封面统一存数据库
 // ⚠ 下面两个库带访问守卫（defined('MAPI_ADMIN') or defined('MAPI_PLAYER_API')），
 //    必须放在 MAPI_PLAYER_API 定义之后 require，否则会被 die('禁止直接访问') 拦下

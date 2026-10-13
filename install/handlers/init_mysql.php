@@ -82,6 +82,12 @@ try {
         'api' => [
             'qq_referer' => 'https://y.qq.com',
             'qq_cover'   => 'https://y.qq.com',
+            // 签名密钥：必须 ≥32 字符高熵随机值。缺失时 jwt_secret() 会抛异常，
+            // 绝不允许回退到由数据库密码派生的弱密钥（那种回退下拖库即可伪造任意 token）。
+            'jwt_secret' => bin2hex(random_bytes(32)),
+            // 落地页「演示播放器」专用密钥。留空 = 不显示演示播放器（安全默认值）。
+            // 切勿填站长正式密钥：它会被拼进页面 HTML 下发给所有访客。
+            'demo_key'   => '',
         ],
     ];
     $configContent = "<?php\nreturn " . var_export($config, true) . ";\n";
