@@ -7,7 +7,9 @@ body[data-theme="dark"]{background:#1a1a2e;color:#e0e0e8}
 
 .glass{background:rgba(255,255,255,.5);backdrop-filter:blur(24px)saturate(200%);border:1px solid rgba(255,255,255,.65);border-radius:16px}
 
-.sidebar{position:fixed;top:8px;left:8px;bottom:8px;z-index:100;width:220px;display:flex;flex-direction:column;padding:24px 0 16px;overflow:hidden;border-radius:18px!important;transition:width .3s cubic-bezier(.4,0,.2,1)}
+/* 侧边栏：贴紧视口左边缘（非悬浮）。四边不再内缩、无圆角，改用 1px 右侧分隔线。
+   .glass 仍提供 backdrop-filter 毛玻璃，但背景/边框/圆角由本规则接管。 */
+.sidebar{position:fixed;top:0;left:0;bottom:0;z-index:100;width:220px;display:flex;flex-direction:column;padding:24px 0 16px;overflow:hidden;border-radius:0!important;border-width:0 1px 0 0;border-style:solid;border-color:rgba(0,0,0,.07);background:rgba(255,255,255,.72);transition:width .3s cubic-bezier(.4,0,.2,1)}
 .sidebar-brand{display:flex;align-items:center;gap:10px;padding:0 20px 20px;flex-shrink:0;position:relative;cursor:pointer;user-select:none}
 .sidebar-logo{width:36px;height:36px;border-radius:10px;background:rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:rgba(0,0,0,.35);letter-spacing:-.02em;flex-shrink:0;transition:all .3s}
 img.sidebar-logo{display:block;object-fit:contain;background:none}
@@ -45,8 +47,8 @@ img.sidebar-logo{display:block;object-fit:contain;background:none}
 .sidebar.collapsed .sb-logout{justify-content:center;padding:7px}
 .sidebar.collapsed .sb-logout span{display:none}
 
-.wrap{height:100vh;margin-left:236px;padding:32px 36px 40px;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:none;transition:margin-left .3s cubic-bezier(.4,0,.2,1),opacity .2s cubic-bezier(.2,0,0,1),transform .22s cubic-bezier(.2,0,0,1);will-change:opacity,transform}
-.sidebar.collapsed~.wrap{margin-left:76px}
+.wrap{height:100vh;margin-left:220px;padding:32px 36px 40px;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:none;transition:margin-left .3s cubic-bezier(.4,0,.2,1),opacity .2s cubic-bezier(.2,0,0,1),transform .22s cubic-bezier(.2,0,0,1);will-change:opacity,transform}
+.sidebar.collapsed~.wrap{margin-left:60px}
 .wrap::-webkit-scrollbar{display:none}
 
 .wrap.nav-out{opacity:0;transform:translateY(-6px)}
