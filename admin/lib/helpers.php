@@ -167,3 +167,24 @@ function lrc_font_key_is_own($key, $uid)
 {
     return upload_key_is_own($key, 'fonts', $uid);
 }
+
+/**
+ * 长任务开始前释放会话锁（可复用，任何"要打好几秒网络/S3/SMTP"的后台 action 都该调用）。
+ *
+ * 为什么必须做：PHP 的文件会话是**整请求排他**的 —— `session_start()` 拿到锁，
+ * 直到脚本结束才释放。后台是同一个浏览器、同一个会话，于是一个长请求会把同一会话的
+ * **所有**其它请求挡在 `session_start()` 上：用户看到的就是"切页/刷新一直转圈"，
+ * 而这和慢请求本身干什么毫无关系。（同类事故本项目已发生过一次，见 handlers/covers.php 顶部说明。）
+ *
+ * 调用时机（务必遵守）：
+ *   ① 必须在 `csrf_require()` **之后** —— 它要读 $_SESSION['csrf_token']；
+ *   ② 必须在所有依赖 $_SESSION 的权限判断**之后**；
+ *   ③ 调用点之后本请求**不得再写 $_SESSION**（否则那些写会丢）。
+ * 释放后 $_SESSION 数组在本请求内**仍可正常读取**，只是写不进去了。
+ */
+function admin_release_session_lock(): void
+{
+    if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+}

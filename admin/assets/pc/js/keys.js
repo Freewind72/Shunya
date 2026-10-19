@@ -206,3 +206,15 @@ if(!window.__keyEscBound){window.__keyEscBound=1;document.addEventListener('keyd
     else openCreateKeyModal();
   }catch(e){}
 })();
+
+
+/* ── 删除密钥确认：如实告知会连带删除多少歌单/歌曲（服务端做级联清理）───────
+   plN / songN 来自服务端渲染时的实时统计；为 0 时不吓唬用户。 */
+function keysDeleteConfirm(form, kid, plN, songN, keyName){
+  var label = keyName || ('密钥 #' + kid);
+  var detail = [];
+  if (plN > 0) detail.push(plN + ' 个歌单');
+  if (songN > 0) detail.push(songN + ' 首歌');
+  var tail = detail.length ? '\n\n将连带删除：' + detail.join('、') + '（不可恢复）' : '\n\n该密钥下没有歌单数据。';
+  return confirm('确认删除密钥「' + label + '」？' + tail);
+}

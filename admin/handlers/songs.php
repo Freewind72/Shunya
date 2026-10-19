@@ -17,6 +17,10 @@ if ($action_key === 'song-add') {
         : $db->query("SELECT id, key_id FROM mapi_playlists WHERE id=$plId AND key_id IN (SELECT id FROM mapi_keys WHERE user_id=" . (int)$_SESSION['admin_id'] . ")");
     if (!$ownerCheck || !($plRow = $ownerCheck->fetch_assoc())) { echo json_encode(['ok' => false, 'msg' => '无权限']); exit; }
     $plKeyId = (int)$plRow['key_id'];
+    // 释放会话锁：下面要下这首歌的封面（网络请求，最长 8 秒），不能让它把同一会话的
+    // 其它请求堵在 session_start() 上（切页/刷新会一直转圈）。见 admin/lib/helpers.php。
+    // 放这里安全：csrf_require() 与上面的权限判断已读完 $_SESSION，此后本请求不再写它。
+    admin_release_session_lock();
     $dup = $db->query("SELECT id FROM mapi_songs WHERE playlist_id=$plId AND song_id='" . $db->real_escape_string($songId) . "' AND server='" . $db->real_escape_string($server) . "'");
     if ($dup && $dup->fetch_assoc()) { echo json_encode(['ok' => false, 'msg' => '歌曲已存在']); exit; }
     $maxOrder = $db->query("SELECT IFNULL(MAX(sort_order),0) FROM mapi_songs WHERE playlist_id=$plId");
@@ -117,6 +121,9 @@ if ($action_key === 'song-remove') {
         $stmt = $db->prepare("DELETE FROM mapi_songs WHERE id=? AND playlist_id IN (SELECT id FROM mapi_playlists WHERE key_id IN (SELECT id FROM mapi_keys WHERE user_id=?))");
         $stmt->bind_param('ii', $sid, $_SESSION['admin_id']);
     }
+    // 释放会话锁：下面要清封面 / 重算歌单封面（可能走网络），别堵住同一会话的其它请求。
+    // $_SESSION 在上面的权限判断里已经读完，此后本请求不再写它。
+    admin_release_session_lock();
     // 删除前先记下这首歌的信息（删完就查不到了）
     $si = ($songInfo && ($row = $songInfo->fetch_assoc())) ? $row : null;
     $ok = $stmt->execute();

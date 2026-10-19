@@ -81,7 +81,7 @@
     fd.append('_csrf', csrf);
     for (var k in data) fd.append(k, data[k]);
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', '?action=' + action, true);
+    xhr.open('POST', '/admin/api/?action='+encodeURIComponent(String(action).replace(/\/+$/,'')), true);
     xhr.onload = function() {
       try { cb(JSON.parse(xhr.responseText)); } catch(e) { cb({ok:false, msg:'解析失败: ' + xhr.responseText.substring(0, 200)}); }
     };
@@ -207,7 +207,7 @@
       if (!name) { toast('名称必填', false); return; }
       var payload = { _csrf: csrf, id: playlistId, name: name, remote_id: '', server: 'netease', cover_mode: coverMode, cover_url: coverUrl };
       var xhr = new XMLHttpRequest();
-      xhr.open('POST', '?action=playlist-update', true);
+      xhr.open('POST', '/admin/api/?action=playlist-update', true);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.onload = function() {
         try { var r = JSON.parse(xhr.responseText); toast(r.msg, r.ok); if (r.ok) { closeSongModal(editPlModal); setTimeout(function() { if(typeof navigateTo==='function')navigateTo(location.href,false);else location.reload(); }, 500); } } catch(e) { toast('解析失败', false); }

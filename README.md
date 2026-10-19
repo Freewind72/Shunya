@@ -285,8 +285,8 @@ Msapi/
 │   ├── handlers/              # 各功能处理端点
 │   ├── includes/              # bootstrap / guard / routes / user_init
 │   ├── layout/                # header / footer
-│   ├── lib/                   # auth / mail / pusher / s3 / webauthn / cover_cache
-│   └── pages/                 # 页面视图
+│   ├── lib/                   # auth / mail / s3 / webauthn / cover_cache
+│   └── <action>/index.php      # 页面真身（每个页面 action 一个目录）
 ├── install/                   # 安装向导
 │   ├── index.php              # 向导入口
 │   ├── init.php               # 安装逻辑

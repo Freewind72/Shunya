@@ -105,7 +105,7 @@ if ($action_key === 'config') {
         }
         flash_set('msg','配置已保存');
     } else { flash_set('err','保存失败'); }
-    header('Location: ?action=config'); exit;
+    header('Location: ' . admin_url('config')); exit;
 }
 
 // ═══ 通行密钥注册/管理 ═══

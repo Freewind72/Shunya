@@ -5,6 +5,27 @@ if (!file_exists($configFile)) {
     header('Location: install/');
     exit;
 }
+
+// ── 根路由器：/admin/** 段交给后台分发链 ──────────────────────────────────
+// **本文件不做任何 action 判定** —— action 的唯一来源是 admin/includes/routes.php 的 $pageMap。
+//
+// ⚠️ 正常情况下这里**不会**被走到：规范地址 /admin/pages/<action>/ 对应的是真实目录，
+//    nginx 自带的 `index index.php` 会直接命中 admin/pages/<action>/index.php，
+//    请求根本不经过本文件（这正是"零 nginx 配置"的由来）。
+//
+//    本段只兜住两类**物理上没有对应文件**的地址：
+//      · /admin 或 /admin/  —— 裸入口（没有同名目录，靠这里转给 admin/index.php 做 302）
+//      · /admin/<action>.php 等旧形态 —— 归一链要 301 到规范地址
+//    这两类在"面板生成的原生 conf + 手工 try_files 兜底"下才会进到这里；
+//    没有兜底时 nginx 直接 404，与改造前一致（不是回归）。
+$routePath = parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+$routePath = is_string($routePath) ? $routePath : '/';
+if ($routePath === '/admin' || strpos($routePath, '/admin/') === 0) {
+    require __DIR__ . '/admin/index.php';
+    exit;
+}
+// ── 路由器段结束：其余路径落回下方落地页渲染 ─────────────────────────────
+
 $CFG = require $configFile;
 date_default_timezone_set('Asia/Shanghai');
 if (empty($CFG['db']['type'])) {
@@ -14,10 +35,17 @@ if (empty($CFG['db']['type'])) {
 require __DIR__ . '/assets/lib/db.php';
 require __DIR__ . '/assets/lib/jwt.php';
 require __DIR__ . '/assets/lib/helpers.php';   // asset_ver()：静态资源版本号
+require_once __DIR__ . '/assets/lib/api_config.php';
+require_once __DIR__ . '/assets/lib/app_config.php';
+// ★ 唯一读取收口点：文件 → 数据库分段覆盖（`db` 段永不覆盖；库不可达则**原样回落文件**）。
+//   必须在上面的 require 之后、任何消费 $CFG 的代码之前。
+//   ⚠️ 这段是首页能起来的前提：jwt_secret / demo_key 存在库里 `mapi_config.api_secrets`，
+//      不走 merge 的话 $CFG 里根本没有这两个键 ⇒ jwt_secret() 抛异常 ⇒ 首页 500。
+$CFG = mapi_app_config($CFG, db_connect());
 $RELAY = require __DIR__ . '/admin/api/relay.php';
 $totalCalls = 0; $todayCalls = 0;
 $superKey = ''; $superToken = '';
-$jwtSecret = jwt_secret($CFG);   // 缺失/过短会抛异常，不再回退到弱密钥
+$jwtSecret = jwt_secret_or_503($CFG);   // 库不可达 ⇒ 503 + 人话，不再 500 白屏
 $statDb = db_connect();
 if ($statDb) {
     try {

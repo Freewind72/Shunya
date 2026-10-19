@@ -112,7 +112,9 @@ CREATE TABLE IF NOT EXISTS mapi_logs (
 );
 
 -- mapi_geetest
+-- id：增量系统后来补的主键（settings.php 的 UPDATE ... WHERE id=? 依赖它），新装直接带上。
 CREATE TABLE IF NOT EXISTS mapi_geetest (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     captcha_id VARCHAR(64) NOT NULL DEFAULT '',
     key VARCHAR(64) NOT NULL DEFAULT ''
 );
@@ -142,7 +144,12 @@ CREATE TABLE IF NOT EXISTS mapi_playlists (
     cover_mode VARCHAR(20) DEFAULT 'auto',
     sort_order INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    cover_updated_at DATETIME DEFAULT NULL
+    cover_updated_at DATETIME DEFAULT NULL,
+    -- 远程歌单上次「从上游同步」的时间（UTC）。用于**每个歌单各自**的 10 分钟冷却：
+    -- 后台每次登录、以及播放器每次被嵌入加载时都会尝试同步，靠这列防滥用（打上游）。
+    -- NULL = 从未同步过（必定同步一次）。必须与 install/sql/mysql.sql 同步维护，否则
+    -- SQLite 全新安装会缺列 → 同步时报 "no such column: synced_at"。
+    synced_at DATETIME DEFAULT NULL
 );
 
 -- 歌曲封面索引：一首歌一行，指向封面对象（S3）或历史遗留的 base64。

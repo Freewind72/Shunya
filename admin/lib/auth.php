@@ -1,4 +1,5 @@
 <?php defined('MAPI_ADMIN') or die('禁止直接访问');
+require_once __DIR__ . '/url.php';   // admin_url()/admin_route_action()：后台地址拼装的唯一来源
 function csrf_token() {
     if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
     return $_SESSION['csrf_token'];
@@ -21,7 +22,10 @@ function csrf_require() {
         flash_set('err', '页面已过期（CSRF 校验未通过）：你这次的改动**没有**写入，请刷新页面后重新保存。');
     }
     http_response_code(303);
-    header('Location: ?action=' . urlencode((string)($_GET['action'] ?? '')));
+    // 跳回原页：旧形态（?action=x）与路径形态都由 admin_url 归一成 /admin/<action>。
+    // 注意不能再用 'Location: ?action=x' —— 相对 Location 会拼到当前**目录**上，
+    // 从 /admin/settings-mail 提交时能拼成 /admin/?action=settings-mail（错页），路径路由下必错。
+    header('Location: ' . admin_url((string)($_GET['action'] ?? admin_route_action())));
     exit;
 }
 
@@ -31,14 +35,14 @@ function login_rl(): void {
 }
 
 function require_login() {
-    if (empty($_SESSION['admin_id'])) { header('Location: ?'); exit; }
+    if (empty($_SESSION['admin_id'])) { header('Location: ' . admin_url('login')); exit; }
 }
 
 function require_admin() {
-    if ((($_SESSION['admin_is_admin'] ?? 99) > 1)) { header('Location: ?action=dashboard'); exit; }
+    if ((($_SESSION['admin_is_admin'] ?? 99) > 1)) { header('Location: ' . admin_url('dashboard')); exit; }
 }
 function require_super_admin() {
-    if ((($_SESSION['admin_is_admin'] ?? 99) > 0)) { header('Location: ?action=dashboard'); exit; }
+    if ((($_SESSION['admin_is_admin'] ?? 99) > 0)) { header('Location: ' . admin_url('dashboard')); exit; }
 }
 
 // 探测 mapi_users 表实际存在的列 (结果在单次请求内缓存)

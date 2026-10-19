@@ -38,6 +38,17 @@ function s3_available(): bool {
     return !empty($cfg['endpoint']) && !empty($cfg['bucket']) && !empty($cfg['access_key']) && !empty($cfg['secret_key']);
 }
 
+/**
+ * S3 请求的显式超时（秒）。
+ * 为什么必须有：stream 上下文不写 `timeout` 时，**完全**由 default_socket_timeout 决定（默认 60 秒）。
+ * 而「清理无用」会对**每个**回收对象调一次 s3_delete —— 存储端点不通/黑洞时每张图白等一个超时，
+ * 几百个对象就是几十分钟的"卡死"（实测：不可达地址单次 21.04 秒，本机 default_socket_timeout=60）。
+ * 上传给宽一点（大图 + 慢链路），删除给紧一点（回收天然是批量的）。
+ */
+function s3_http_timeout(bool $upload = false): int {
+    return $upload ? 30 : 15;
+}
+
 function s3_full_key(string $key): string {
     $cfg = s3_config();
     $prefix = trim($cfg['path_prefix'] ?? '', '/');
@@ -123,6 +134,7 @@ function s3_put(string $key, string $data, string $content_type = 'application/o
         'header' => implode("\r\n", $h),
         'content' => $data,
         'ignore_errors' => true,
+        'timeout' => s3_http_timeout(true),   // 不写就由 default_socket_timeout（60s）兜底
     ]]);
     $r = @file_get_contents($cfg['endpoint'] . '/' . $cfg['bucket'] . '/' . s3_full_key($key), false, $ctx);
     if ($r === false) return false;
@@ -148,6 +160,7 @@ function s3_delete(string $key): bool {
         'method' => 'DELETE',
         'header' => implode("\r\n", $h),
         'ignore_errors' => true,
+        'timeout' => s3_http_timeout(false),  // 批量回收：每个对象都必须有界
     ]]);
     $r = @file_get_contents($cfg['endpoint'] . '/' . $cfg['bucket'] . '/' . s3_full_key($key), false, $ctx);
     if ($r === false) return false;

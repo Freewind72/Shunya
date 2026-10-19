@@ -1,14 +1,14 @@
 function toggleTheme(){
   var btn=document.getElementById('themeSwitch');if(!btn)return;
   var isDark=!btn.classList.contains('active');
-  fetch('?action=profile',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'_theme_toggle=1&_csrf='+encodeURIComponent(document.querySelector('input[name=_csrf]').value)+'&mode='+(isDark?'dark':'light')})
+  fetch('/admin/pages/profile/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'_theme_toggle=1&_csrf='+encodeURIComponent(document.querySelector('input[name=_csrf]').value)+'&mode='+(isDark?'dark':'light')})
   .then(function(r){if(r.ok){btn.classList.toggle('active',isDark);document.body.setAttribute('data-theme',isDark?'dark':'light');}});
 }
 
 function saveBgUrl(){
   var url=document.getElementById('bgUrlInput');var btn=document.getElementById('bgUrlSaveBtn');var st=document.getElementById('bgStatus');
   if(!url||!btn||!st)return;url=url.value.trim();btn.disabled=true;btn.textContent='保存中…';var _c=document.querySelector('input[name=_csrf]');
-  fetch('?action=bg-url-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,_csrf:_c&&_c.value})})
+  fetch('/admin/api/?action=bg-url-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,_csrf:_c&&_c.value})})
   .then(function(r){return r.json()}).then(function(d){
     if(!d.ok)throw Error(d.error||'保存失败');
     st.style.display='block';st.style.color='#27ae60';st.textContent='壁纸链接已保存';
@@ -26,12 +26,12 @@ function uploadBg(){var _c=document.querySelector('input[name=_csrf]');
   if(['image/jpeg','image/png','image/webp','image/gif'].indexOf(file.type)===-1){alert('仅支持JPG/PNG/WebP/GIF');return}
   bgUploading=true;var btn=document.getElementById('bgUploadBtn');var st=document.getElementById('bgStatus');
   btn.disabled=true;btn.textContent='获取签名…';st.style.display='block';st.style.color='#666';st.textContent='';
-  fetch('?action=bg-presign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mime:file.type,_csrf:_c&&_c.value})})
+  fetch('/admin/api/?action=bg-presign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mime:file.type,_csrf:_c&&_c.value})})
   .then(function(r){return r.json()}).then(function(d){
     if(!d.ok)throw Error(d.error||'获取签名失败');st.textContent='正在上传…';
     return fetch(d.url,{method:'PUT',body:file,headers:{'Content-Type':file.type}}).then(function(s3r){if(!s3r.ok)throw Error('上传失败HTTP '+s3r.status);return d.key;});
   }).then(function(key){st.textContent='正在保存…';
-    return fetch('?action=bg-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:key,_csrf:_c&&_c.value})}).then(function(r){return r.json()});
+    return fetch('/admin/api/?action=bg-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:key,_csrf:_c&&_c.value})}).then(function(r){return r.json()});
   }).then(function(d){
     if(!d.ok)throw Error(d.error||'保存失败');st.style.color='#27ae60';st.textContent='上传成功！';
     var prev=document.getElementById('bgPreview');if(!prev){prev=document.createElement('div');prev.id='bgPreview';prev.style.cssText='margin-bottom:12px;border-radius:8px;overflow:hidden;max-height:160px';var card=document.querySelector('.card:nth-child(2)');if(card)card.insertBefore(prev,card.children[1]);}
@@ -48,7 +48,7 @@ function logErr(tag,msg){
   var fd=new FormData();
   fd.append('name',tag);
   fd.append('message',String(msg).substring(0,500));
-  navigator.sendBeacon('?action=js-log',fd);
+  navigator.sendBeacon('/admin/api/?action=js-log',fd);
 }
 
 function pkErrMsg(e){
@@ -76,7 +76,7 @@ function pkErrMsg(e){
 function registerPasskey(){
   var btn=document.getElementById('pkRegBtn');btn.disabled=true;btn.textContent='绑定中...';
   var csrfToken='';
-  fetch('?action=pk-begin',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(d){
+  fetch('/admin/api/?action=pk-begin',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(d){
     if(d.error){alert(d.error);btn.disabled=false;btn.textContent='绑定通行密钥';return}
     if(!d.challenge){alert('获取挑战失败，请刷新重试');btn.disabled=false;btn.textContent='绑定通行密钥';return}
     csrfToken=d._csrf||'';
@@ -95,7 +95,7 @@ function registerPasskey(){
     if(!cred){btn.disabled=false;btn.textContent='绑定通行密钥';return}
     var ao=bufToB64url(cred.response.attestationObject),cjd=bufToB64url(cred.response.clientDataJSON);
     var fd=new FormData();fd.append('attestationObject',ao);fd.append('clientDataJSON',cjd);fd.append('_csrf',csrfToken);
-    return fetch('?action=pk-complete',{method:'POST',body:fd}).then(function(r){return r.json()});
+    return fetch('/admin/api/?action=pk-complete',{method:'POST',body:fd}).then(function(r){return r.json()});
   }).then(function(d){
     btn.disabled=false;btn.textContent='绑定通行密钥';
     if(d&&d.ok){   // 就地软刷新重画密钥列表，不整页刷新

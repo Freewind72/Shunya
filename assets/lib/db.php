@@ -332,6 +332,14 @@ class DB_Sqlite {
             $this->insert_id = $this->sqlite->lastInsertRowID();
             $this->error = '';
             if ($result instanceof SQLite3Result) {
+                // ⚠ 只有 SELECT 这类**有列**的语句才能去遍历结果集。
+                // PHP 8.5 下 SQLite3::query('INSERT ...') 返回的是 SQLite3Result（不是 true），
+                // 而对该结果集调用 fetchArray() 会**再次 step 语句** → INSERT 执行两遍。
+                // 判据用 numColumns()：非 SELECT 为 0，必须直接返回 true，绝不能进 while。
+                if ($result->numColumns() === 0) {
+                    $this->num_rows = $this->affected_rows;
+                    return true;
+                }
                 $this->num_rows = 0;
                 $rows = [];
                 while ($row = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
@@ -435,6 +443,11 @@ class DB_SqliteStmt {
             $this->db->affected_rows = $this->affected_rows;
             $this->db->insert_id = $this->insert_id;
             if ($result instanceof SQLite3Result) {
+                // 同上：非 SELECT 的语句绝不能遍历结果集（遍历会再次 step → 重复执行）。
+                if ($result->numColumns() === 0) {
+                    $this->cachedResult = true;
+                    return true;
+                }
                 $rows = [];
                 while ($row = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
                 $this->cachedResult = new DB_SqliteResult($rows);

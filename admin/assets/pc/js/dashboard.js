@@ -20,14 +20,14 @@ if (!window.__dashDebugChangeBound) { window.__dashDebugChangeBound = 1; documen
   var fd = new FormData();
   fd.append('debug', on);
   fd.append('_csrf', dt.getAttribute('data-csrf') || '');
-  fetch('?action=debug-toggle', { method: 'POST', body: fd })
+  fetch('/admin/api/?action=debug-toggle', { method: 'POST', body: fd })
     .then(function (r) { return r.text(); })
     .then(function (txt) {
       if (txt.trim() !== 'ok') showToast('切换失败', 'err');
       else {
         var logList = document.getElementById('logList');
         if (logList) {
-          fetch('?action=dashboard')
+          fetch('/admin/pages/dashboard/')
             .then(function (r) { return r.text(); })
             .then(function (html) {
               var doc = new DOMParser().parseFromString(html, 'text/html');

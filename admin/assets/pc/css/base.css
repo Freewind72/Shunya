@@ -60,6 +60,20 @@ img.sidebar-logo{display:block;object-fit:contain;background:none}
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.04)}
 .card-title{font-size:17px;font-weight:700;color:rgba(0,0,0,.55);letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
 .card-title svg{width:18px;height:18px;flex-shrink:0;opacity:.5}
+/* 音乐配置：三张**各自独立**的卡片（与页面其它 .card 同级），不再套一层总卡。
+   主题功能 / 歌词条字体 一行两列，播放器皮肤独占一行。
+   用 minmax(0,1fr) 而不是 1fr：面板里有长输入框/长 code，1fr 会被内容撑破。 */
+.mcfg-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-bottom:20px}
+.mcfg-grid > .card{margin-bottom:0}   /* .card 自带 margin-bottom，放进网格会撑出多余空档 */
+.mcfg-panel{padding:22px 22px 24px}   /* 两列比整页窄，内边距收紧一点更透气 */
+.mcfg-panel-wide{grid-column:1 / -1}
+/* 每个面板自己的保存按钮：水平居中。
+   必须用 .btn.mcfg-save 提高特异性 —— .btn 定义在本文件更后面，同特异性会被它的
+   display:inline-flex 覆盖。自动宽度的行内级按钮无法用 margin:auto 居中，
+   所以改 display:block + width:fit-content 再 margin:auto；万一浏览器不支持
+   fit-content，会退化成整宽按钮，属于可接受的降级，不会破版。 */
+.btn.mcfg-save{display:block;width:fit-content;min-width:96px;margin:14px auto 0;text-align:center}
+@media (max-width:860px){.mcfg-grid{grid-template-columns:minmax(0,1fr);gap:14px}}
 .card-header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 
 .section-header{text-align:center;padding:20px 0 12px 0;margin-bottom:6px}
@@ -99,6 +113,19 @@ select.form-input::-ms-expand{display:none}
 .btn-copy{width:28px;height:28px;border-radius:6px;border:1px solid rgba(0,0,0,.06);background:rgba(255,255,255,.4);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:rgba(0,0,0,.3);transition:all .2s;flex-shrink:0}
 .btn-copy:hover{background:rgba(255,255,255,.7);color:rgba(0,0,0,.5)}
 .btn-copy svg{width:14px;height:14px}
+/* 密钥卡片右上角的「强制同步」按钮：与 .btn-copy 同尺寸同风格，
+   但它是"动作"按钮，所以常态比 .btn-copy 更可见一点。
+   busy 时会自动展开，以容纳 "2/7" 这种进度文字。 */
+.key-sync-btn{width:28px;height:28px;padding:0;border-radius:6px;border:1px solid rgba(0,0,0,.06);background:rgba(255,255,255,.4);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:rgba(0,0,0,.45);transition:all .2s;flex-shrink:0}
+.key-sync-btn:hover{background:rgba(255,255,255,.75);color:rgba(0,0,0,.7)}
+.key-sync-btn svg{width:14px;height:14px}
+.key-sync-btn:disabled{cursor:default;opacity:.8}
+.key-sync-btn.is-busy{width:auto;padding:0 8px}
+.key-sync-btn.is-busy svg{width:12px;height:12px;animation:key-sync-spin 1s linear infinite}
+.key-sync-num{font-size:10px;font-weight:600;margin-left:3px}
+@keyframes key-sync-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+[data-theme="dark"] .key-sync-btn{border-color:rgba(255,255,255,.06);background:rgba(255,255,255,.06);color:rgba(255,255,255,.45)}
+[data-theme="dark"] .key-sync-btn:hover{background:rgba(255,255,255,.14);color:rgba(255,255,255,.85)}
 .btn-block{width:100%;justify-content:center;margin-top:16px}
 .btn-danger{background:rgba(255,95,87,.08);color:#ff5f57;border:1px solid rgba(255,95,87,.15)}
 .btn-danger:hover{background:rgba(255,95,87,.15)}
@@ -129,7 +156,9 @@ select.form-input::-ms-expand{display:none}
 .key-card-info{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
 .key-card-user{font-size:13px;font-weight:600;color:rgba(0,0,0,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .key-card-code{font-family:'SF Mono','Fira Code',monospace;font-size:10px;color:rgba(0,0,0,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
-.key-card-badges{display:flex;gap:6px;flex-shrink:0}
+/* align-items:center 是必须的：默认 stretch 会让「N 歌单」角标被同行里
+   28px 高的同步按钮**拉伸到同样高**，角标上下就多出一圈空白。 */
+.key-card-badges{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .key-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:rgba(0,0,0,.04);color:rgba(0,0,0,.35)}
 .key-section-label{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:11px;font-weight:600;color:rgba(0,0,0,.4)}
 .key-section-hint{font-size:10px;font-weight:400;color:rgba(0,0,0,.22)}

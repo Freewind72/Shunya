@@ -8,7 +8,7 @@ require_once __DIR__ . '/../lib/domains.php';   // 数据层（本 handler 不�
 $__domIsSuper  = (($_SESSION['admin_is_admin'] ?? 99) <= 1);
 $__domUserId   = (int)($_SESSION['admin_id'] ?? 0);
 $__domScopeUid = $__domIsSuper ? 0 : $__domUserId;   // 0 = 不限用户
-$__domBack     = '?action=domains';
+$__domBack     = admin_url('domains');   // 绝对地址：相对 Location 在路径路由下会拼错目录
 
 // ── 列表（后台 AJAX 预检用）─────────────────────────────────────────
 if ($action_key === 'domains-list') {
@@ -105,34 +105,34 @@ if ($action_key === 'domains-delete') {
     header('Location: ' . $__domBack); exit;
 }
 
-// ── 全局「启用域名授权」开关 ────────────────────────────────────────
+// ── 「启用域名授权」开关（2026-10-20 起：**按用户独立**，不再是全局）──
+// 每个登录者只能改自己的开关；运行时（get-config）按密钥主人取值。
+// 老的全局键作为缺省回落，所以升级后各用户初始值 = 原全局值，行为不变。
 if ($action_key === 'domains-authorize') {
-    if (!$__domIsSuper) {
-        flash_set('err', '仅管理员可修改全局开关');
-        header('Location: ' . $__domBack); exit;
-    }
     csrf_require();
+    if ($__domUserId <= 0) {
+        flash_set('err', '未登录'); header('Location: ' . $__domBack); exit;
+    }
     $on = !empty($_POST['domain_authorize']);
-    if (domain_authorize_set($db, $on)) {
-        flash_set('msg', $on ? '域名授权已启用：未授权域名将无法启动播放器' : '域名授权已关闭：任何站都能使用播放器');
+    if (domain_authorize_set_for($db, $__domUserId, $on)) {
+        flash_set('msg', $on ? '域名授权已启用（你的密钥）：未授权域名将无法启动播放器' : '域名授权已关闭（你的密钥）：任何站都能使用你的播放器');
     } else {
         flash_set('err', '开关保存失败');
     }
     header('Location: ' . $__domBack); exit;
 }
 
-// ── 「自动添加检测到的域名」开关 ────────────────────────────────────
+// ── 「自动添加检测到的域名」开关（按用户独立，同上）─────────────────
 if ($action_key === 'domains-auto-add') {
-    if (!$__domIsSuper) {
-        flash_set('err', '仅管理员可修改全局开关');
-        header('Location: ' . $__domBack); exit;
-    }
     csrf_require();
+    if ($__domUserId <= 0) {
+        flash_set('err', '未登录'); header('Location: ' . $__domBack); exit;
+    }
     $on = !empty($_POST['domain_auto_add']);
-    if (domain_auto_add_set($db, $on)) {
+    if (domain_auto_add_set_for($db, $__domUserId, $on)) {
         flash_set('msg', $on
-            ? '自动添加已开启：主机名第一次加载播放器就会自动登记并放行'
-            : '自动添加已关闭：未登记的域名会被拒绝，需要在这里手动添加');
+            ? '自动添加已开启（你的密钥）：主机名第一次加载播放器就会自动登记并放行'
+            : '自动添加已关闭（你的密钥）：未登记的域名会被拒绝，需要在这里手动添加');
     } else {
         flash_set('err', '开关保存失败');
     }

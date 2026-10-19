@@ -32,17 +32,8 @@ function skin_pos_of(array $cfg, string $skin, string $fallback): string {
 }
 $isAdmin = $_SESSION['admin_is_admin'] ?? 99;
 
-// Pusher 上线通知
-if ($_SESSION['admin_id']) {
-    $lastPing = intval($_SESSION['_pusher_ping'] ?? 0);
-    if (time() - $lastPing > 60) {
-        $_SESSION['_pusher_ping'] = time();
-        pusher_trigger(PUSHER_CHANNEL, 'user-online', [
-            'user_id'  => (string)$_SESSION['admin_id'],
-            'username' => $_SESSION['admin_user'],
-        ]);
-    }
-}
+// Pusher 上线通知已于 2026-10-16 整体移除（含 admin/lib/pusher.php、
+// layout/footer.php 的上报、以及保存端 pusher 段的读写）。
 
 // 初始化数据版本
 $r = $db->query("SELECT COUNT(*) as cnt FROM mapi_config WHERE config_key='data_version'");

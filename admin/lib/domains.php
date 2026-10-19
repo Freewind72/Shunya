@@ -328,7 +328,131 @@ function domains_delete($db, $userId, $id) {
     }
 }
 
-// 全局开关：mapi_config.domain_authorize，值为字符串 '1' 时启用；缺失 / '0' 一律放行
+// ── 授权 / 自动登记开关（2026-10-20 起：**按用户独立**，不再是全局）────────
+//
+// 产品口径：域名页的一切配置都属**独立用户配置**。同一台机器上 A 用户关掉自动登记，
+// 不该影响 B 用户的自动登记。运行时（get-config）按**密钥主人**取开关。
+//
+// 存储形态：mapi_config 里 config_key = 'domain_authorize_u<uid>' / 'domain_auto_add_u<uid>'。
+// 兼容：授权开关在用户未设置时回落老全局键（老部署升级后行为不变）；
+// **自动登记不回落、一律缺省关**（2026-10-20 产品要求：所有用户默认关闭自动添加）——
+//   自动登记会让任何主机名写库并放行，缺省开等于"新装即可被任意站白嫖"，
+//   且老全局键里存的'开'不代表用户本意（那是旧版缺省，不是用户主动选择）。
+// 缺省语义：授权开关缺省=关（不挡人）；自动登记缺省=**关**（必须显式打开）。
+
+function _domain_switch_key(string $base, int $userId): string {
+    return $base . '_u' . max(0, $userId);
+}
+
+// 读一个用户的开关值；$fallbackGlobal=true 时回落到老全局键
+function _domain_switch_get($db, string $base, int $userId, bool $defOn, bool $fallbackGlobal = true): bool {
+    if (!$db) return false;
+    try {
+        $key = _domain_switch_key($base, $userId);
+        $st = $db->prepare("SELECT config_value FROM mapi_config WHERE config_key=? LIMIT 1");
+        if ($st) {
+            $st->bind_param('s', $key);
+            $st->execute();
+            $res = $st->get_result();
+            $row = $res ? $res->fetch_assoc() : null;
+            if ($row) {
+                $v = (string)($row['config_value'] ?? '');
+                if ($v !== '') return ($v === '1');   // 用户自己设过 ⇒ 以它为准（含显式 0/1）
+            }
+        }
+        if ($fallbackGlobal) {
+            // 回落老全局键（2026-10-20 之前的部署只有这一个开关）。
+            // ⚠ 只有授权开关回落；自动登记不回落（domain_auto_add_on_for 传 false），
+            //   因为老全局键里的'开'是旧版缺省，不是用户主动选择，而新缺省是关。
+            $old = ($base === 'domain_authorize') ? 'domain_authorize' : 'domain_auto_add';
+            $r = $db->query("SELECT config_value FROM mapi_config WHERE config_key='" . $old . "' LIMIT 1");
+            if ($r && is_object($r)) {
+                $row = $r->fetch_assoc();
+                if ($row) {
+                    $v = (string)($row['config_value'] ?? '');
+                    if ($base === 'domain_authorize') return ($v === '1');   // 老语义：缺省关
+                    return ($v !== '0');                                     // 老语义：缺省开（仅兼容层内部，实际不会被调用）
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        domains_set_error($e->getMessage());
+        return false;
+    }
+    return $defOn;
+}
+
+// 写一个用户的开关（只写用户键，绝不碰别人的）
+function _domain_switch_set($db, string $base, int $userId, bool $on): bool {
+    if (!$db || $userId <= 0) return false;
+    try {
+        $key = _domain_switch_key($base, $userId);
+        $v = $on ? '1' : '0';
+        $st = $db->prepare("REPLACE INTO mapi_config (config_key, config_value) VALUES (?, ?)");
+        if (!$st) return false;
+        $st->bind_param('ss', $key, $v);
+        $ok = (bool)$st->execute();
+        if ($ok && function_exists('cfg_cache_invalidate')) cfg_cache_invalidate();
+        return $ok;
+    } catch (Throwable $e) {
+        domains_set_error($e->getMessage());
+        return false;
+    }
+}
+
+/** 某用户的「启用域名授权」开关（get-config 运行时按密钥主人调用） */
+function domain_authorize_on_for($db, int $userId): bool {
+    return _domain_switch_get($db, 'domain_authorize', $userId, false, true);
+}
+
+/** 某用户的「自动添加检测到的域名」开关（get-config 运行时按密钥主人调用）
+ *  ⚠ 缺省**关闭**（2026-10-20 产品要求）：自动登记会让任何主机名写进域名表并放行，
+ *    默认开等于"新装即可被任意站白嫖"。用户必须到域名页显式打开才启用。 */
+function domain_auto_add_on_for($db, int $userId): bool {
+    return _domain_switch_get($db, 'domain_auto_add', $userId, false, false);
+}
+
+/** 写某用户的授权开关（域名页用；各人写各人的） */
+function domain_authorize_set_for($db, int $userId, bool $on): bool {
+    return _domain_switch_set($db, 'domain_authorize', $userId, $on);
+}
+
+/** 写某用户的自动登记开关（域名页用；各人写各人的） */
+function domain_auto_add_set_for($db, int $userId, bool $on): bool {
+    return _domain_switch_set($db, 'domain_auto_add', $userId, $on);
+}
+
+/** 列出所有已显式设置过开关的用户（域名页「用户开关总览」用） */
+function domain_switch_users_list($db): array {
+    $out = [];
+    if (!$db) return $out;
+    try {
+        $r = $db->query("SELECT config_key, config_value FROM mapi_config WHERE config_key LIKE 'domain_authorize_u%' OR config_key LIKE 'domain_auto_add_u%'");
+        if ($r) while ($row = $r->fetch_assoc()) {
+            $k = (string)$row['config_key'];
+            if (preg_match('/^domain_authorize_u(\d+)$/', $k, $m)) {
+                $uid = (int)$m[1];
+                $out[$uid] = $out[$uid] ?? ['user_id' => $uid, 'authorize' => null, 'auto_add' => null];
+                $out[$uid]['authorize'] = ((string)$row['config_value'] === '1');
+            } elseif (preg_match('/^domain_auto_add_u(\d+)$/', $k, $m)) {
+                $uid = (int)$m[1];
+                $out[$uid] = $out[$uid] ?? ['user_id' => $uid, 'authorize' => null, 'auto_add' => null];
+                $out[$uid]['auto_add'] = ((string)$row['config_value'] === '1');
+            }
+        }
+    } catch (Throwable $e) {
+        domains_set_error($e->getMessage());
+    }
+    ksort($out);
+    return array_values($out);
+}
+
+// 单个密钥最多允许自动登记多少行（防止被脚本刷库）
+defined('DOMAINS_AUTO_MAX') or define('DOMAINS_AUTO_MAX', 100);
+
+/* ── 旧的全局开关函数（保留但标注废弃）────────────────────────────────
+   2026-10-20 起开关按用户独立。这两只函数不再被域名页/运行时调用
+   （保留只为兼容尚未升级的第三方引用；新代码请用 *_on_for / *_set_for）。 */
 function domain_authorize_on($db) {
     if (!$db) return false;
     try {

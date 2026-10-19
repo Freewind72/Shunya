@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS `mapi_config` (
 -- name：密钥名称（创建时必填，一个站/一个用途配一条密钥时便于区分）
 -- domain：该密钥的「授权域名」，非空时只有这个主机名能用这条密钥（get-config 校验）；
 --         创建时填的域名会同时写进 mapi_domains 并置为已授权。
+-- （dev_id 列已移除：全项目零引用的历史预留字段；已装库里的同名列由增量系统不动、无害。）
 CREATE TABLE IF NOT EXISTS `mapi_keys` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `user_id` INT NOT NULL,
@@ -137,9 +138,13 @@ CREATE TABLE IF NOT EXISTS `mapi_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- mapi_geetest
+-- id：增量系统后来补的主键（settings.php 的 UPDATE ... WHERE id=? 依赖它）。
+--     这里直接带上一行一条（LIMIT 1 语义），新装不必再靠增量补。
 CREATE TABLE IF NOT EXISTS `mapi_geetest` (
+    `id` INT NOT NULL AUTO_INCREMENT,
     `captcha_id` VARCHAR(64) NOT NULL DEFAULT '',
-    `key` VARCHAR(64) NOT NULL DEFAULT ''
+    `key` VARCHAR(64) NOT NULL DEFAULT '',
+    PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- mapi_super_settings
@@ -164,6 +169,10 @@ CREATE TABLE IF NOT EXISTS `mapi_playlists` (
     `sort_order` INT DEFAULT 0,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `cover_updated_at` DATETIME DEFAULT NULL,
+    -- 远程歌单上次「从上游同步」的时间（UTC）。用于**每个歌单各自**的 10 分钟冷却：
+    -- 后台每次登录、以及播放器每次被嵌入加载时都会尝试同步，靠这列防滥用（打上游）。
+    -- NULL = 从未同步过（必定同步一次）。新增列由增量同步系统自动补，无需写 -- @ 指令。
+    `synced_at` DATETIME DEFAULT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_key_id` (`key_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -231,10 +240,11 @@ CREATE TABLE IF NOT EXISTS `mapi_stats` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── 宿主域名授权与底部偏移 ──────────────────────────────────────────
--- 播放器被嵌入到哪个站，就按那个站的 Host 找这一行。判定顺序：
---   mapi_config.domain_authorize = 0（默认）→ 一律放行，只按本行的 auto/修正量走
---   mapi_config.domain_authorize = 1        → 域名必须在本表且 authorized=1，否则拒绝启动
---   mapi_config.domain_auto_add = 1（默认，缺失即视为 1）→ 主机名第一次加载播放器时自动登记并放行
+-- 播放器被嵌入到哪个站，就按那个站的 Host 找这一行。判定按**密钥主人**的用户级开关：
+--   mapi_config.domain_authorize_u<uid>（缺省回落老全局键 domain_authorize，再缺省=关）
+--     = 开 → 域名必须在本表且 authorized=1，否则拒绝启动；= 关 → 一律放行，只按本行的 auto/修正量走
+--   mapi_config.domain_auto_add_u<uid>（**缺省=关**，2026-10-20 起所有用户默认关闭，不回落全局）
+--     = 开 → 主机名第一次加载播放器时自动登记并放行；= 关 → 新主机名一律拒绝，需手动添加
 -- 自动登记只补新行，不会动已有行（手动停用 authorized=0 的行不会被复活）。auto_added=1 标记自动登记。
 -- 每行可以绑定到一个密钥：key_id = 0 表示「不限」（该用户名下所有密钥共用这一行，升级上来的老数据保持该值），
 -- key_id > 0 时只有那条密钥能用这一行 —— 一个账号可以有多条密钥，各自授权各自的站。

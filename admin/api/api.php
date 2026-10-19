@@ -21,9 +21,16 @@ $CFG = require __DIR__ . '/../../config/config.php';
 require __DIR__ . '/../../assets/lib/db.php';
 require __DIR__ . '/../../assets/lib/api_config.php';
 require __DIR__ . '/../../assets/lib/helpers.php';
+// ★ 与其它入口一致：把库里的分段配置合并进来（`site`/`admin`/`api`/`api_secrets`/`websocket`）。
+//   为什么必须有这一步：若这里仍用**文件值**，一旦库里 `api_secrets` 被改，
+//   本入口的签名密钥就与首页/后台/room.php **分叉** —— 同一个密钥两处不同来源，是最难查的一类问题。
+//   ⚠ 必须在 `jwt_secret()` 之前合并；`db` 段永不被覆盖（见 mapi_app_config 铁律）。
+require __DIR__ . '/../../assets/lib/app_config.php';
+$CFG = mapi_app_config($CFG, db_connect());
 // 签名密钥：统一走 jwt_secret()。必须在 helpers.php 之后才能调用；
-// 缺失/过短时抛异常，不再回退到 hash('sha256', db_password . site_url) 那种弱密钥。
-$jwt_secret = jwt_secret($CFG);
+// 缺失/过短时**给 503 + JSON**（本入口的契约是 JSON），不再抛未捕获异常把响应打成 500 白屏。
+// ⚠ 库不可达时签名密钥取不到（它现在只存在库里）⇒ 这正是要明确失败、而不是崩掉的那一类。
+$jwt_secret = jwt_secret_or_503($CFG, 'json');
 require __DIR__ . '/../lib/cover_cache.php';      // 封面统一存数据库
 // ⚠ 下面两个库带访问守卫（defined('MAPI_ADMIN') or defined('MAPI_PLAYER_API')），
 //    必须放在 MAPI_PLAYER_API 定义之后 require，否则会被 die('禁止直接访问') 拦下
@@ -32,6 +39,10 @@ require_once __DIR__ . '/../lib/s3.php';           // 封面本地化：拼 S3 �
 require_once __DIR__ . '/../lib/cover_store.php';  // 封面本地化：内容寻址索引（已本地化的走直链）
 require_once __DIR__ . '/../lib/redis.php';        // 播放器数据缓存（解析结果/配置/状态）；未启用或连不上时全部退化为未命中
 require_once __DIR__ . '/../lib/domains.php';      // 域名授权 + 自动登记（与后台共用同一份数据层）
+// 远程歌单自动同步：嵌入播放器加载时触发一次。这两份库原先只放 MAPI_ADMIN 守卫，
+// 已补成双守卫（MAPI_PLAYER_API 也放行），否则这里 require 会被 die('禁止直接访问') 拦下。
+require_once __DIR__ . '/../lib/upstream_api.php';     // 拉上游歌单清单
+require_once __DIR__ . '/../lib/upstream_snapshot.php';// 写快照 + 每歌单 10 分钟冷却
 
 rate_limit_check('api', 120, 60);
 
@@ -242,6 +253,51 @@ switch ($action) {
         }
         cover_apply_urls($db_log, $result);            // 已本地化的封面换成 S3 直链
         json_exit(array_values($result));
+        break;
+
+    // 远程歌单自动同步（嵌入播放器加载时触发一次）。
+    // 为什么放在网关而不是 get-config：get-config 有 Redis 配置缓存，命中缓存时**根本不会执行**同步代码，
+    // 且在里面同步会拖慢播放器首屏（违背"封面优先/点哪首取哪首"）。这里由前端拿到配置后异步打，互不阻塞。
+    // 防滥用：① 只处理本 key 名下的远程歌单；② 每歌单各自 10 分钟冷却（playlist_snapshot_songs 里的闸）；
+    //         ③ 单次请求最多同步 N 个，剩下的等下次（前端也会逐个调）。
+    case 'sync-playlists':
+        $k = auth_required();
+        if (!$db_log) json_exit(['ok' => false, 'reason' => 'db_offline']);
+        $keyRow = null;
+        $st = $db_log->prepare("SELECT id, user_id FROM mapi_keys WHERE api_key=? AND status=1");
+        if ($st) {
+            $st->bind_param('s', $k); $st->execute();
+            $res = $st->get_result();
+            $keyRow = $res ? $res->fetch_assoc() : null;
+        }
+        if (!$keyRow) json_exit(['ok' => false, 'reason' => 'invalid_key']);
+        $keyId = (int)$keyRow['id'];
+        // 只取这条 key 名下、且冷却已过的远程歌单，按展示顺序
+        $rows = [];
+        $plStmt = $db_log->prepare("SELECT id, key_id, server, remote_id, synced_at FROM mapi_playlists
+                                    WHERE key_id=? AND type='remote' AND remote_id<>''
+                                    ORDER BY sort_order ASC, id ASC LIMIT 20");
+        if ($plStmt) {
+            $plStmt->bind_param('i', $keyId); $plStmt->execute();
+            $r2 = $plStmt->get_result();
+            while ($r2 && $x = $r2->fetch_assoc()) $rows[] = $x;
+        }
+        $done = []; $skipped = 0; $failed = 0;
+        // ⚠ 形状要对：upstream_* 读的是 $cfg['api'][...]，而 $api 是 read_mapi_api_config() 的**扁平**结果
+        //   （$api['base_url'] 而非 $api['api']['base_url']）。直接传 $api 会让 base_url 取空 →
+        //   上游地址为空 → 一首歌都拿不到（这个 bug 是端到端测试抓出来的，别改回去）。
+        $upCfg = ['api' => $api];
+        foreach ($rows as $pl) {
+            if (!playlist_sync_allowed($db_log, $pl)) { $skipped++; continue; }
+            $snap = playlist_snapshot_songs($db_log, $upCfg, $pl);
+            if (!empty($snap['skipped'])) { $skipped++; continue; }
+            if (($snap['total'] ?? 0) === 0) { $failed++; continue; }
+            $done[] = ['id' => (int)$pl['id'], 'added' => $snap['added'], 'updated' => $snap['updated'], 'missing' => $snap['missing']];
+        }
+        // 同步改了歌单内容 ⇒ 让配置缓存失效，下次 get-config 拿到新快照
+        if ($done) cfg_cache_invalidate();
+        json_exit(['ok' => true, 'synced' => $done, 'skipped' => $skipped, 'failed' => $failed,
+                   'cooldown' => PLAYLIST_SYNC_COOLDOWN]);
         break;
 
     case 'url':
@@ -615,6 +671,7 @@ switch ($action) {
         header('Location: ' . ($finalUrl ?: $qqCover . $id . '.jpg'));
         exit;
 
+
     case 'verify-key':
         $input = json_decode(file_get_contents('php://input'), true);
         $k = $input['key'] ?? $_GET['key'] ?? '';
@@ -828,9 +885,10 @@ switch ($action) {
                         'keyDomain'    => $keyDomain,
                     ];
                 } else {
-                    $authorizeOn = false;
-                    $sw = $db_log->query("SELECT config_value FROM mapi_config WHERE config_key='domain_authorize'");
-                    if ($sw && is_object($sw)) { $swRow = $sw->fetch_assoc(); $authorizeOn = ((string)($swRow['config_value'] ?? '0')) === '1'; }
+                    // 授权/自动登记开关（2026-10-20 起）**按密钥主人独立**：
+                    // 每个用户各自一套（mapi_config.domain_*_u<uid>，老全局键作缺省回落）。
+                    // A 用户关掉自动登记不再影响 B 用户；判定永远看这条密钥属于谁。
+                    $authorizeOn = domain_authorize_on_for($db_log, $userId);
                     $row = null;
                     // 域名授权按密钥区分：绑定到本条密钥的行优先（key_id 大的先），其次才是 key_id=0（不限）的行
                     $dStmt = $db_log->prepare("SELECT * FROM mapi_domains WHERE user_id=? AND domain=? AND (key_id=0 OR key_id=?) ORDER BY key_id DESC LIMIT 1");
@@ -840,10 +898,10 @@ switch ($action) {
                         $dRes = $dStmt->get_result();
                         $row = $dRes ? $dRes->fetch_assoc() : null;
                     }
-                    // 自动登记：mapi_config.domain_auto_add（缺省视为开）。主机名第一次加载播放器时
+                    // 自动登记：按**密钥主人**的开关（缺省视为开）。主机名第一次加载播放器时
                     // 直接写进 mapi_domains 并授权，免得换了域名 / 上了 CDN / 多了个 www 就被自己的开关挡住。
                     // 已有行一律不动：管理员手动停用（authorized=0）的行不会被复活。
-                    if (!$row && $authorizeOn && domain_auto_add_on($db_log)) {
+                    if (!$row && $authorizeOn && domain_auto_add_on_for($db_log, $userId)) {
                         $autoRow = domain_auto_register($db_log, $userId, $host, $keyId);
                         if ($autoRow) $row = $autoRow;
                     }

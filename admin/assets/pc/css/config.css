@@ -24,3 +24,48 @@
 [data-theme="dark"] .create-field-label{color:rgba(255,255,255,.4)}
 [data-theme="dark"] .create-cover-opt{border-color:rgba(255,255,255,.08);color:rgba(255,255,255,.45)}
 [data-theme="dark"] .create-cover-opt:has(input:checked){border-color:rgba(108,92,231,.5);background:rgba(108,92,231,.08);color:rgba(255,255,255,.65)}
+
+/* ── 远程歌单同步：骨架屏 ─────────────────────────────────────────────
+   登录后自动同步远程歌单时，用骨架屏**把卡片结构占住**（保持原有尺寸/圆角/位置），
+   同步完一个解除一个，避免"卡片先空后跳"的布局抖动。
+   只给远程歌单加（自建歌单不受同步影响，立刻显示）。
+
+   ⚠ 实现方式：**不替换 innerHTML、不换 DOM 节点**，只加这个类 + 盖一层流光。
+   原因：卡片上挂着「点卡片弹编辑框」和「删除按钮」两类监听，一旦替换内容/节点，
+   同步完这些监听就没了 —— 用户点不开编辑框、也删不掉歌单。
+   所以用 opacity 隐藏内容（布局尺寸不变），DOM 与监听全部原样保留。 */
+.pl-card-skeleton{position:relative;overflow:hidden;cursor:default}
+.pl-card-skeleton:hover{transform:none;box-shadow:none;background:rgba(255,255,255,.35)}
+/* 内容隐藏但**仍占位**（不是 display:none）→ 卡片尺寸/布局完全不变 */
+.pl-card-skeleton > .playlist-card-cover,
+.pl-card-skeleton > .playlist-card-body,
+.pl-card-skeleton > .playlist-card-delete{opacity:0}
+/* 骨架占位块：画在内容底下，尺寸与真实内容对齐 */
+.pl-card-skeleton::before{
+  content:'';position:absolute;inset:0;z-index:0;
+  background:
+    linear-gradient(rgba(0,0,0,.05),rgba(0,0,0,.05)) top left/100% 68% no-repeat,
+    linear-gradient(rgba(0,0,0,.05),rgba(0,0,0,.05)) 10px 76%/58% 8px no-repeat,
+    linear-gradient(rgba(0,0,0,.05),rgba(0,0,0,.05)) 10px 84%/38% 8px no-repeat;
+}
+.pl-card-skeleton::after{
+  content:'';position:absolute;inset:0;z-index:1;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.55) 50%,transparent 100%);
+  transform:translateX(-100%);animation:plSkeleton 1.2s ease-in-out infinite;
+}
+[data-theme="dark"] .pl-card-skeleton:hover{background:rgba(255,255,255,.04)}
+[data-theme="dark"] .pl-card-skeleton::before{
+  background:
+    linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) top left/100% 68% no-repeat,
+    linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) 10px 76%/58% 8px no-repeat,
+    linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) 10px 84%/38% 8px no-repeat;
+}
+[data-theme="dark"] .pl-card-skeleton::after{
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.08) 50%,transparent 100%);
+}
+@keyframes plSkeleton{100%{transform:translateX(100%)}}
+/* 同步中的小提示（卡片底部），说明"正在同步"而不是卡住 */
+.pl-skel-tip{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:3px 0;text-align:center;
+  font-size:9px;color:rgba(0,0,0,.35);background:rgba(255,255,255,.5)}
+[data-theme="dark"] .pl-skel-tip{color:rgba(255,255,255,.35);background:rgba(0,0,0,.3)}
+@media (prefers-reduced-motion:reduce){.pl-card-skeleton::after{animation:none}}

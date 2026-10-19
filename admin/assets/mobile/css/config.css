@@ -8,3 +8,39 @@
 .playlist-row .form-input{padding:6px 8px;font-size:12px}
 
 [data-theme="dark"] .inline-form{border-bottom-color:rgba(255,255,255,.04)}
+
+/* ── 远程歌单同步：骨架屏（与 PC 同思路，尺寸随移动端卡片）────────────
+   ⚠ 同样**不替换 innerHTML、不换节点**：卡片上的「点卡片弹编辑框」「删除」监听必须保住。
+   用 opacity 隐藏内容（布局不变）+ 流光遮罩，尺寸不跳。只给远程歌单加。 */
+.pl-card-skeleton{position:relative;overflow:hidden;cursor:default}
+.pl-card-skeleton:hover{background:rgba(255,255,255,.35)}
+.pl-card-skeleton > .playlist-card-cover,
+.pl-card-skeleton > .playlist-card-body,
+.pl-card-skeleton > .playlist-card-delete{opacity:0}
+.pl-card-skeleton::before{
+  content:'';position:absolute;inset:0;z-index:0;
+  background:
+    linear-gradient(rgba(0,0,0,.05),rgba(0,0,0,.05)) top left/100% 66% no-repeat,
+    linear-gradient(rgba(0,0,0,.05),rgba(0,0,0,.05)) 6px 74%/58% 6px no-repeat,
+    linear-gradient(rgba(0,0,0,.05),rgba(0,0,0,.05)) 6px 84%/38% 6px no-repeat;
+}
+.pl-card-skeleton::after{
+  content:'';position:absolute;inset:0;z-index:1;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.55) 50%,transparent 100%);
+  transform:translateX(-100%);animation:plSkeleton 1.2s ease-in-out infinite;
+}
+[data-theme="dark"] .pl-card-skeleton:hover{background:rgba(255,255,255,.04)}
+[data-theme="dark"] .pl-card-skeleton::before{
+  background:
+    linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) top left/100% 66% no-repeat,
+    linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) 6px 74%/58% 6px no-repeat,
+    linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) 6px 84%/38% 6px no-repeat;
+}
+[data-theme="dark"] .pl-card-skeleton::after{
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.08) 50%,transparent 100%);
+}
+@keyframes plSkeleton{100%{transform:translateX(100%)}}
+.pl-skel-tip{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:2px 0;text-align:center;
+  font-size:8px;color:rgba(0,0,0,.35);background:rgba(255,255,255,.5)}
+[data-theme="dark"] .pl-skel-tip{color:rgba(255,255,255,.35);background:rgba(0,0,0,.3)}
+@media (prefers-reduced-motion:reduce){.pl-card-skeleton::after{animation:none}}

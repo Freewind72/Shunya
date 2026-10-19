@@ -17,8 +17,43 @@ history.scrollRestoration='manual';
 var navActions=['dashboard','keys','users','config','domains','settings','settings-site','settings-mail','settings-security','settings-api','settings-storage','profile','playlist-detail'];
 
 // 子菜单 → 父菜单映射：子项激活时父菜单高亮、底栏水珠停在父项上
+// ⚠️ 必须与 admin/layout/header.php 的 $navParents 保持一致（两处不同步会导致"刷新有高亮、切页没了"）。
 var navParents={'settings-site':'settings','settings-mail':'settings','settings-security':'settings','settings-api':'settings','settings-storage':'settings'};
 function navKeyOf(action){return navParents[action]||action}
+
+// —— 路由形态（2026-10-20 起两类）：页面 = /admin/pages/<page>/（目录索引，nginx 零配置直配）
+//    动作 = /admin/api/?action=<动作>（单一入口 admin/api/index.php）。旧形态 /admin/?action=<action> 由服务端 301 收口。——
+//    ⚠️ 页面地址**带 pages 段**：/admin/pages/keys/ 是真实目录，靠 nginx 自带的 `index index.php`
+//       直接命中 admin/pages/keys/index.php —— 不需要任何 rewrite / try_files。
+//    ⚠️ navActions / isActionHref / actionOfUrl 仍然只认**页面路径**：动作 URL 不走软导航。
+// 判断一律走"路径段"，不要再用 searchParams.get('action')：切页是 pushState 改地址栏的，
+// 路径才是当前页的真实来源。ADMIN_BASE 可由页面覆盖（子目录部署时用）。
+var ADMIN_BASE=window.ADMIN_BASE||'/admin';
+// 页面目录段 —— 必须与 admin/lib/url.php 的 ADMIN_PAGES_DIR 逐字一致
+var PAGE_DIR='pages';
+function actionOfUrl(u){
+  try{
+    var p=new URL(u,location.origin).pathname;
+    if(p!==ADMIN_BASE&&p.indexOf(ADMIN_BASE+'/')!==0)return '';
+    var rest=p.slice(ADMIN_BASE.length).replace(/^\/+|\/+$/g,'');
+    if(!rest||/^index\.php$/i.test(rest))return '';
+    var seg=rest.split('/');
+    // 剥页面目录段：/admin/pages/keys/ → keys（大小写不敏感）
+    if(seg.length>1&&String(seg[0]).toLowerCase()===PAGE_DIR)seg.shift();
+    var seg0=seg[0]||'';
+    return seg0.length>4&&/\.php$/i.test(seg0)?seg0.slice(0,-4):seg0;
+  }catch(e){return ''}
+}
+// 链接的 href 与"某个 action 的规范路径"是否同一个页面。
+// ⚠️ 必须与 admin/lib/url.php 的 admin_url() 生成规则**逐字一致**，这里由 PAGE_DIR + PAGE_SUFFIX 决定：
+//   服务端生成 /admin/pages/<action>/（带尾斜杠的目录索引形态，零 rewrite 配置），判定也必须是同一个形态，
+//   否则 toggle(..., false) 会把高亮全部清掉（症状：只有刷新时服务端渲染的高亮在，切页就没了）。
+var PAGE_SUFFIX='/';
+function isActionHref(href,action){
+  if(!href)return false;
+  var want=ADMIN_BASE+'/'+PAGE_DIR+'/'+action+PAGE_SUFFIX;
+  return href===want||href===location.origin+want;
+}
 
 function setGroupOpen(open,save){
   var grp=document.querySelector('.sidebar .sb-group');
@@ -32,14 +67,15 @@ function setGroupOpen(open,save){
 function setActiveNav(action){
   var key=navKeyOf(action);
   document.querySelectorAll('.sidebar .sb-item').forEach(function(el){
-    var href=el.getAttribute('href');
-    el.classList.toggle('active',!!href&&href==='?action='+key);
+    el.classList.toggle('active',isActionHref(el.getAttribute('href'),key));
   });
   var grp=document.querySelector('.sidebar .sb-group');
   if(!grp)return;
-  var child=grp.querySelector('.sb-sub-item[href="?action='+action+'"]');
+  var child=null;
   grp.querySelectorAll('.sb-sub-item').forEach(function(el){
-    el.classList.toggle('active',el.getAttribute('href')==='?action='+action);
+    var on=isActionHref(el.getAttribute('href'),action);
+    el.classList.toggle('active',on);
+    if(on)child=el;
   });
   if(child)setGroupOpen(true);
   grp.classList.toggle('has-active',!!child);
@@ -93,10 +129,44 @@ function swapPageCss(href,proceed){
   setTimeout(function(){apply(false)},8000);
 }
 
+/* 按**文档顺序**依次加载一组外部 JS，最后一个 onload（或任何 onerror）之后才回调。
+   串行是刻意的：页面里的外部脚本可能被后面的脚本依赖（页面区先定义 window.XXX，
+   同页的 page-js 随后就读它）。并行加载不保证先后，会随机"库没到就先用"。 */
+function loadExternalScripts(list,cb){
+  if(!list||!list.length){cb();return}
+  var i=0;
+  function next(){
+    if(i>=list.length){cb();return}
+    var s=document.createElement('script');
+    s.src=list[i++];
+    s.onload=next;
+    s.onerror=next;        // 单个脚本失败不阻断后面的，也不阻断页面 JS
+    document.body.appendChild(s);
+  }
+  next();
+}
+
+/* 收集软导航响应**页面区里**的外部脚本，按文档顺序返回。
+   ⚠ 必须排除 #page-js：它由 footer.php 独立产出（在 .wrap 之外），已由 loadPageScripts
+   按同一时序单独加载；若这里再跑一次，页面 JS 会被执行两遍（重复建连、重复绑事件）。 */
+function externalScriptSrcs(scope){
+  var out=[];
+  scope.querySelectorAll('script[src]').forEach(function(s){
+    if(s.id==='page-js')return;
+    var u=s.getAttribute('src');
+    if(!u)return;
+    if(out.indexOf(u)===-1)out.push(u);     // 同一地址去重：避免重复执行
+  });
+  return out;
+}
+
 function loadPageScripts(src,cb){
   var cur=document.getElementById('page-js');
   if(!src){if(cur)cur.remove();cb();return}
-  if(cur&&cur.getAttribute('src')===src&&cur.getAttribute('data-loaded')==='1'){cb();return}
+  /* ⚠ 不能因为"src 没变"就跳过执行：**两个不同页面可以共用同一份页面 JS**。
+     内容已被 applyPage 换掉，页面 JS 就必须为新内容重新 boot 一次；旧的跳过逻辑让第二个页面
+     永远"没有 JS"——表现为软导航进该页后只显示空态（硬刷新却正常）。
+     重新插入同 src 的 <script> 会走浏览器缓存 + 重新执行，不会多一次网络往返。 */
   if(cur)cur.remove();
   var s=document.createElement('script');
   s.id='page-js';s.src=src;
@@ -125,8 +195,16 @@ function loadPageScripts(src,cb){
         cards[i].style.background=on?'rgba(108,92,231,.10)':'transparent';
       }
     });
-  }function runPageScripts(scope){
+  }function runPageScripts(scope,ext){
+  var hasExt=false;
   scope.querySelectorAll('script').forEach(function(s){
+    /* 带 src 的外部脚本**不能**在这里执行：el.textContent 为空 ⇒ 旧代码直接 return 掉，
+       于是它永远不执行（外链静默丢失）。收集出去交给 loadExternalScripts 按序加载；
+       带 ext（=软导航）时才收集，表单保存后的重执行按原样跳过，不改既有时序。 */
+    if(s.getAttribute('src')||s.hasAttribute('src')){
+      if(s.id!=='page-js')hasExt=true;
+      return;
+    }
     if(!s.textContent.trim())return;
     var m=s.textContent.match(/showToast\('((?:[^'\\]|\\.)*)','((?:[^'\\]|\\.)*)'/);
     if(m){showToast(m[1],m[2]);return}
@@ -144,6 +222,7 @@ function loadPageScripts(src,cb){
   try{if(typeof updateTestPlayerButtons==='function')updateTestPlayerButtons()}catch(e){}
   try{if(typeof initDebugExpand==='function')initDebugExpand()}catch(e){}
   try{initCodeMirror()}catch(e){}
+  return ext?hasExt:false;      // 调用方据此决定"是否还要按序加载外部脚本"
 }
 
 function navPending(on){document.body.style.cursor=on?'progress':''}
@@ -181,7 +260,7 @@ function applyPage(wrap,html,doc,url,push,keepScroll){
   wrap.classList.add('nav-in');
   setTimeout(function(){wrap.classList.remove('nav-in')},420);
   document.title=doc.title;
-  var a=new URL(url,location.origin).searchParams.get('action');
+  var a=actionOfUrl(url);
   if(a&&navActions.indexOf(a)!==-1)setActiveNav(a);
   if(push!==false&&url!==location.href)history.pushState(null,'',url);
   if(keepScroll){wrap.scrollTop=scr}else{wrap.scrollTo(0,0)}
@@ -212,10 +291,20 @@ function navigateTo(url,push){
       // 内容立刻切换（不再等新样式下载完）：样式在后台原子替换，新样式就绪前旧样式继续生效，不会丢样式
       applyPage(wrap,nw.innerHTML,doc,url,push,false);
       swapPageCss(nc?nc.getAttribute('href'):null,function(){});
-      loadPageScripts(nj?nj.getAttribute('src'):null,function(){
+      /* ⚠ 顺序要紧，且**唯一出口**只有一个（别把 loadPageScripts 复制成两份，会漂移）：
+         ① 先执行新页的内联脚本（`window.__XXX` 这类"页面 → 页面 JS"的数据契约）；
+         ② 再按文档顺序补跑页面里的**外部脚本**（旧引擎只重放内联、外链被静默丢掉）；
+         ③ 最后才加载 #page-js。
+         反过来的话，页面 JS 起来时读到的还是**上一页**的内联数据
+         （症状：软导航进某页后拿不到页面数据、只显示空态；硬刷新却正常，因为整页加载时内联脚本先跑）。 */
+      var __needExt=runPageScripts(wrap,true);
+      var __extRun=__needExt?loadExternalScripts:function(_l,next){next()};
+      __extRun(externalScriptSrcs(wrap),function(){
         if(_navAbort!==ctrl)return;
-        runPageScripts(wrap);
-        finishNav(ctrl);
+        loadPageScripts(nj?nj.getAttribute('src'):null,function(){
+          if(_navAbort!==ctrl)return;
+          finishNav(ctrl);
+        });
       });
     })
     .catch(function(e){
@@ -231,11 +320,15 @@ function applyCollapse(c){sb.classList.toggle('collapsed',c);if(sbb){var t=c?'�
 if(sb&&sbb){var isCollapsed=localStorage.getItem('sidebar_collapsed')==='1';applyCollapse(isCollapsed);sbb.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();var c=!sb.classList.contains('collapsed');applyCollapse(c);localStorage.setItem('sidebar_collapsed',c?'1':'0')})}
 
 document.addEventListener('click',function(e){
-  var link=e.target.closest('a[href^="?action="]');
-  if(!link)return;
-  var a=new URL(link.href,location.origin).searchParams.get('action');
+  var link=e.target.closest('a[href]');
+  if(!link||!link.href||link.target)return;
+  if(new URL(link.href,location.origin).origin!==location.origin)return;
+  var a=actionOfUrl(link.href);
   if(a==='logout'||navActions.indexOf(a)===-1)return;
-  if(link.classList.contains('active')){e.preventDefault();return;}
+  // 点「当前页自己」的导航项 → 不重复加载（保持原行为）。但「父项高亮」的页面不在此列：
+  // 例如某个子页面的高亮项是它的父菜单，此时点父菜单应当真的回列表页，否则侧栏那一项
+  // 在子页上变成死链（点了没反应）。判据用 action 比当前页更准。
+  if(a===actionOfUrl(location.href)){e.preventDefault();return;}
   e.preventDefault();
   navigateTo(link.href);
 });
@@ -255,7 +348,7 @@ document.addEventListener('submit',function(e){
   if(f.method!=='post')return;
   if(f.hasAttribute('data-modal'))return;
   var act=(f.getAttribute('action')||'').trim()||location.href;
-  if(act.indexOf('?action=')===-1)return;
+  if(act.indexOf('?action=')===-1&&!actionOfUrl(act))return;
   e.preventDefault();
   // **提交按钮的 name/value 必须一起发**：后端大量分支是靠 isset($_POST['_xxx_submit']) 判断
   // "用户点了哪个按钮"的，而 new FormData(f) 不含它 → 分支永远不跑、页面弹回旧值
@@ -266,19 +359,34 @@ document.addEventListener('submit',function(e){
   if(btn){btn.disabled=true;btn.textContent='保存中…'}
   var ow=document.querySelector('.wrap');
   if(!ow){window.location.href=f.action||location.href;return}
-  var targetAct=new URL(act,location.origin).searchParams.get('action')||'';
-  var currentAct=new URL(location.href).searchParams.get('action')||'';
+  var targetAct=actionOfUrl(act)||'';
+  var currentAct=actionOfUrl(location.href)||'';
   var samePage=targetAct===currentAct;
   // 不再在请求期间隐藏页面：等结果回来再切换，避免“点一下页面就消失、迟迟不回来”
   navPending(true);
   pausePlayerPreload();
   var fd=new FormData(f);
   if(sub&&sub.name)fd.append(sub.name,sub.value);      // ← 关键一行（缺失就是"保存回弹"）
-  fetch(f.action||location.href,{method:'POST',body:fd})
-    .then(function(r){if(!r.ok)throw Error();var u=r.url;return r.text().then(function(h){return{html:h,url:u}})})
+  fetch(f.action||location.href,{method:'POST',body:fd,credentials:'same-origin'})
+    .then(function(r){
+      // ★ 不再对任何非 2xx 一律"跳回 action"：那是个纯 GET，等于**静默清空用户刚填的内容**
+      //   —— 报错页面看起来像"刷新了一下、内容回弹"，用户完全不知道发生了什么。
+      //   改成：先尽力渲染服务器返回的页面（后台的报错页多半也是正常页面），
+      //   渲染不了就**原地保留表单** + Toast 提示，绝不跳转、绝不丢数据。
+      if(!r.ok) return {html:null,url:r.url,error:'服务器返回 '+r.status+(r.statusText?' '+r.statusText:'')};
+      return r.text().then(function(h){return{html:h,url:r.url,error:''}});
+    })
     .then(function(res){
-      var doc=new DOMParser().parseFromString(res.html,'text/html');
-      var nw=doc.querySelector('.wrap');if(!nw){window.location.href=f.action||location.href;return}
+      var nw=null,doc=null;
+      if(res.html){
+        doc=new DOMParser().parseFromString(res.html,'text/html');
+        nw=doc.querySelector('.wrap');
+      }
+      if(!nw){
+        // 拿不到页面骨架（非 2xx / 断网后的兜底 / 返回的不是后台页面）
+        showToast((res.error||'保存失败：请求没有拿到页面') + '，你填的内容还在，请重试', 'err');
+        return null;                       // 什么都不做：表单、按钮、滚动位置全部保持原样
+      }
       var nc=doc.querySelector('#page-css');
       var nj=doc.getElementById('page-js');
       var cssHref=nc?nc.getAttribute('href'):null;
@@ -287,7 +395,7 @@ document.addEventListener('submit',function(e){
         var scr=ow.scrollTop;
         ow.innerHTML=nw.innerHTML;
         document.title=doc.title;
-        var a0=new URL(res.url,location.origin).searchParams.get('action');
+        var a0=actionOfUrl(res.url);
         if(a0&&navActions.indexOf(a0)!==-1)setActiveNav(a0);
         if(res.url!==location.href)history.pushState(null,'',res.url);
         swapPageCss(cssHref,function(){});
@@ -295,13 +403,23 @@ document.addEventListener('submit',function(e){
           runPageScripts(ow);
           ow.scrollTop=scr;
         });
-        return;
+        return null;
       }
       applyPage(ow,nw.innerHTML,doc,res.url,true,false);
       swapPageCss(cssHref,function(){});
       loadPageScripts(jsSrc,function(){ runPageScripts(ow); });
+      return null;
     })
-    .catch(function(){window.location.href=f.action||location.href})
+    .catch(function(err){
+      // 网络层失败：断网 / 服务器没响应 / 请求被中断。
+      // fetch 只有"整个请求没拿到响应"时才 reject，此时**什么都没提交**，
+      // 所以最正确的处理就是留在原地、明确告诉用户，让他自己决定要不要重试。
+      console.warn('[submit] 提交失败：',err);
+      var off=('onLine' in navigator)&&!navigator.onLine;
+      showToast(off?'网络已断开：这次保存没有提交，内容还在，恢复网络后请重试'
+                   :'请求失败：这次保存可能没有提交，内容还在，请重试','err');
+      return null;
+    })
     .finally(function(){navPending(false);resumePlayerPreload();if(btn){btn.disabled=false;btn.textContent=origTxt}});
 });
 
@@ -350,43 +468,6 @@ function initCodeMirror() {
 
 initCodeMirror();
 
-(function(){
-  var curUser = (document.querySelector('.sb-username') || {}).textContent || '';
-  // 凭据由服务端下发（window.MAPI_PUSHER，来源 config/config.php），不再硬编码在客户端。
-  // 未配置时直接不订阅：既避免空密钥调用 Pusher 报错，也省掉一次无用的鉴权请求。
-  var pc = window.MAPI_PUSHER || {};
-  if (!pc.key || typeof Pusher === 'undefined') return;
-  var pusher = new Pusher(pc.key, { cluster: pc.cluster, channelAuthorization: { endpoint: '?action=pusher-auth', transport: 'ajax' } });
-  var channel = pusher.subscribe(pc.channel || 'presence-admin-online');
-
-  channel.bind('user-online', function(data) {
-    if(data.username && data.username !== curUser) showFloatingToast(data.username + ' 上线了');
-  });
-
-  channel.bind('user-offline', function(data) {
-    if(data.username && data.username !== curUser) showFloatingToast(data.username + ' 离线了');
-  });
-
-  window.pusherOnlineIds = {};
-  window.pusherOnlineReady = false;
-
-  channel.bind('user-online', function(data) {
-    if(data.user_id){
-      window.pusherOnlineIds[data.user_id] = true;
-      window.pusherOnlineReady = true;
-      var el = document.querySelector('.online-dot[data-uid="'+data.user_id+'"]');
-      if(el){ el.style.background='#27ae60'; el.title='在线'; }
-    }
-  });
-
-  channel.bind('user-offline', function(data) {
-    if(data.user_id){
-      delete window.pusherOnlineIds[data.user_id];
-      var el = document.querySelector('.online-dot[data-uid="'+data.user_id+'"]');
-      if(el){ el.style.background='#b2bec3'; el.title='离线'; }
-    }
-  });
-})();
 
 function showFloatingToast(msg){
   var el = document.createElement('div');

@@ -1,6 +1,6 @@
 <?php
 
-pusher_trigger(PUSHER_CHANNEL, 'user-offline', ['user_id' => (string)$_SESSION['admin_id'], 'username' => $_SESSION['admin_user']]);
+// Pusher user-offline 上报已于 2026-10-16 随整体移除一并删除。
 session_destroy();
-header('Location: ?');
+header('Location: ' . admin_url('login'));
 exit;

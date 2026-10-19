@@ -25,6 +25,7 @@ function svg($name) {
         'db' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.7-4 3-9 3s-9-1.3-9-3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/></svg>',
         'disc' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>',
         'chev' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>',
+        'refresh' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
     ];
     return $icons[$name] ?? '';
 }
@@ -70,6 +71,10 @@ foreach ($navItems as $k => $item) {
         $navParents[$ck] = $k;
     }
 }
+// 非导航项、但视觉上属于某个父菜单的页面 → 父项关系（服务器渲染的侧栏高亮用）。
+// 前端同源条目见 assets/{pc,mobile}/js/base.js 的 navParents
+//（那里还有 navKeyOf() 用它算高亮键），两处必须一致，否则"刷新有高亮、切页没了"或反之。
+
 $navActiveKey = $navParents[$action] ?? $action;
 
 function formatBytes($b) {
@@ -79,7 +84,7 @@ function formatBytes($b) {
 }
 
 $adminPlayerToken = '';
-$jwtSecret = jwt_secret($cfg);   // 缺失/过短会抛异常，不再回退到弱密钥
+$jwtSecret = jwt_secret_or_503($cfg);   // 库不可达 ⇒ 503 + 人话，不再 500 白屏
 if (!empty($db) && empty($db->connect_error) && empty($db->_error)) {
     $r = $db->query("SELECT api_key FROM mapi_keys WHERE status=1 ORDER BY id ASC LIMIT 1");
     if ($r && $row = $r->fetch_assoc()) {
@@ -143,16 +148,13 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
 <?php endif; ?>
 <link rel="stylesheet" href="<?= $RELAY['cm']['core_css'] ?>">
 <link rel="stylesheet" href="<?= $RELAY['cm']['theme_monokai'] ?>">
-<?php if (pusher_enabled()): ?>
-<script src="<?= $RELAY['sdk']['pusher_js'] ?>"></script>
-<?php endif; ?>
 <script src="<?= $RELAY['cm']['core_js'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_xml'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_css'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_js'] ?>"></script>
 <script src="<?= $RELAY['cm']['mode_html'] ?>"></script>
 <script src="<?= $RELAY['cm']['addon_activeline'] ?>"></script>
-<script>window.RELAY=<?= json_encode($RELAY['asset']) ?>;window.MAPI_PUSHER=<?= json_encode(['key' => PUSHER_KEY, 'cluster' => PUSHER_CLUSTER, 'channel' => PUSHER_CHANNEL]) ?>;window.__mapiPrefetchConcurrency=<?= (strpos((string)($_SERVER['SERVER_SOFTWARE'] ?? ''), 'Development Server') !== false) ? 1 : 3 ?>;</script>
+<script>window.RELAY=<?= json_encode($RELAY['asset']) ?>;window.__mapiPrefetchConcurrency=<?= (strpos((string)($_SERVER['SERVER_SOFTWARE'] ?? ''), 'Development Server') !== false) ? 1 : 3 ?>;</script>
 </head>
 <body data-device="<?= $isMobile ? 'mobile' : 'pc' ?>" data-theme="<?= $adminUiTheme ?>" style="<?= $bgStyle ?>">
 <?php if ($bgVideoUrl): ?>
@@ -163,14 +165,14 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
   <span class="topbar-title">顺雅管理</span>
   <nav class="topbar-nav" id="topbarNav">
 <?php foreach ($navItems as $k => $item): ?>
-    <a href="?action=<?= $k ?>" class="topbar-nav-item<?= $k === $navActiveKey ? ' active' : '' ?>">
+    <a href="<?= admin_url($k) ?>" class="topbar-nav-item<?= $k === $navActiveKey ? ' active' : '' ?>">
       <span class="topbar-nav-icon"><?= $item['icon'] ?></span>
       <span class="topbar-nav-label"><?= $item['label'] ?></span>
     </a>
 <?php endforeach; ?>
   </nav>
   <div class="topbar-right">
-    <a href="?action=profile" class="topbar-user">
+    <a href="<?= admin_url('profile') ?>" class="topbar-user">
       <span class="topbar-avatar"><?php if ($qq = $_SESSION['admin_qq'] ?? ''): ?><img src="<?= $RELAY['avatar']['qq'] ?>?b=qq&nk=<?= (int)$qq ?>&s=100"><?php else: ?><span class="topbar-avatar-fallback"><?= htmlspecialchars(mb_substr($_SESSION['admin_user'],0,1,'UTF-8')) ?></span><?php endif; ?></span>
       <span class="topbar-username"><?= htmlspecialchars($_SESSION['admin_user']) ?></span>
     </a>
@@ -179,7 +181,7 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
 <?php else: ?>
 <div class="sidebar glass" id="sidebar">
   <div class="sidebar-brand" id="sbBrand" title="折叠侧边栏" role="button" tabindex="0">
-    <img class="sidebar-logo" src="../favicon.ico" alt="">
+    <img class="sidebar-logo" src="/favicon.ico" alt="">
     <span class="sidebar-title">顺雅管理</span>
   </div>
   <nav class="sidebar-nav" id="sidebarNav">
@@ -193,7 +195,7 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
       </button>
       <div class="sb-sub">
 <?php foreach ($item['children'] as $ck => $ci): ?>
-        <a href="?action=<?= $ck ?>" class="sb-sub-item<?= $ck === $action ? ' active' : '' ?>">
+        <a href="<?= admin_url($ck) ?>" class="sb-sub-item<?= $ck === $action ? ' active' : '' ?>">
           <span class="sb-icon"><?= $ci['icon'] ?></span>
           <span class="sb-label"><?= $ci['label'] ?></span>
         </a>
@@ -201,7 +203,7 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
       </div>
     </div>
 <?php else: ?>
-    <a href="?action=<?= $k ?>" class="sb-item<?= $k === $navActiveKey ? ' active' : '' ?>">
+    <a href="<?= admin_url($k) ?>" class="sb-item<?= $k === $navActiveKey ? ' active' : '' ?>">
       <span class="sb-icon"><?= $item['icon'] ?></span>
       <span class="sb-label"><?= $item['label'] ?></span>
     </a>
@@ -209,11 +211,11 @@ if (!$bgVideoUrl && !$bgStyle && !empty($_SESSION['admin_background']) && functi
 <?php endforeach; ?>
   </nav>
   <div class="sidebar-footer">
-    <a href="?action=profile" class="sb-user">
+    <a href="<?= admin_url('profile') ?>" class="sb-user">
       <span class="sb-avatar"><?php if ($qq = $_SESSION['admin_qq'] ?? ''): ?><img src="<?= $RELAY['avatar']['qq'] ?>?b=qq&nk=<?= (int)$qq ?>&s=100"><?php else: ?><span class="sb-avatar-fallback"><?= htmlspecialchars(mb_substr($_SESSION['admin_user'],0,1,'UTF-8')) ?></span><?php endif; ?></span>
       <span class="sb-username"><?= htmlspecialchars($_SESSION['admin_user']) ?></span>
     </a>
-    <a href="?action=logout" class="sb-logout" title="退出"><?= svg('exit') ?><span>退出</span></a>
+    <a href="<?= admin_url('logout') ?>" class="sb-logout" title="退出"><?= svg('exit') ?><span>退出</span></a>
   </div>
 </div>
 <?php endif; ?>

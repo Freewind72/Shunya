@@ -11,12 +11,10 @@ $RELAY = [
     ],
 
     'sdk' => [
-        'pusher_js'        => 'https://js.pusher.com/8.2.0/pusher.min.js',
         'geetest_js'       => 'https://static.geetest.com/v4/gt4.js',
     ],
 
     'api' => [
-        'pusher_base'      => 'https://api-ap3.pusher.com',
         'geetest_validate' => 'https://gcaptcha4.geetest.com/validate',
     ],
 

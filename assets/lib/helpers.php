@@ -203,22 +203,91 @@ if (!function_exists('jwt_secret')) {
     function jwt_secret(?array $cfg = null): string
     {
         static $cached = null;
-        if ($cached !== null) return $cached;
 
+        // ⚠ 缓存只有在"没人给我 $cfg"时才无条件复用。
+        //   为什么：`api.jwt_secret` 现在可以从**数据库**来（`mapi_app_config()` 合并进 `$cfg['api']`）。
+        //   若某个调用方先无参调用（读文件）、另一个调用方后来传了**合并后**的 $cfg，
+        //   无脑复用缓存就会让后者拿到**文件里的旧密钥** —— 表现为"签名/校验不一致"的诡异故障。
+        //   所以：传了 $cfg 就以它为准（只把它当缓存，不当权威）。
         if ($cfg === null) {
+            if ($cached !== null) return $cached;
             $cfgFile = dirname(__DIR__, 2) . '/config/config.php';
             $cfg = is_file($cfgFile) ? require $cfgFile : [];
             if (!is_array($cfg)) $cfg = [];
+            // 无参调用时也尽量走唯一收口点（能连上库就拿到合并后的值）
+            if (function_exists('mapi_app_config') && function_exists('db_connect')) {
+                $db = @db_connect();
+                if ($db) $cfg = mapi_app_config($cfg, $db);
+            }
         }
 
         $secret = trim((string)($cfg['api']['jwt_secret'] ?? ''));
         if (strlen($secret) < 32) {
             throw new RuntimeException(
-                'config/config.php 的 api.jwt_secret 缺失或过短（需 ≥32 字符，当前 ' . strlen($secret) . ' 个）。'
+                'api.jwt_secret 缺失或过短（需 ≥32 字符，当前 ' . strlen($secret) . ' 个）。'
                 . '生成命令：php -r "echo bin2hex(random_bytes(32));"'
+                . ' —— 它现在来自数据库 `mapi_config` 的 `api_secrets` 行（或 config/config.php 的 api 段）。'
                 . ' —— 拒绝回退到由数据库密码派生的弱密钥。'
             );
         }
         return $cached = $secret;
+    }
+}
+
+/**
+ * 取签名密钥；**取不到时给"明确可读的失败"，绝不抛未捕获异常**。
+ *
+ * 为什么要这个包装（背景，别简化掉）：
+ *   `api.jwt_secret` 现在只从数据库来（`mapi_config.api_secrets`）。config.php 里原来那份
+ *   `api` 段已按用户批准删除 ⇒ **库连不上时这些值没有任何来源**。
+ *   若直接调 `jwt_secret($cfg)`，它会抛 `RuntimeException` ⇒ 五个入口全部 **500 白屏**，
+ *   用户只看到"服务器错误"。用户已明确要求：库不可达时给 **503 + 一句人话**，
+ *   不要 500、不要白屏、不要未捕获异常。
+ *
+ * 行为：
+ *   ① 正常：返回密钥（库优先，config.php 兜底）。
+ *   ② 入参里没有密钥，但**库其实可用** ⇒ 改走无参 `jwt_secret()`（它自己连库取合并后的值）。
+ *      这一条是为了救"调用方只传了文件配置、没合并"的旧调用点（例如 `$cfg` 是别处传来的局部变量）。
+ *   ③ 两者都拿不到（真·库不可达）⇒ 发 **503 + 中文说明** 并 `exit`。CLI 环境改成 stderr + exit(1)。
+ *
+ * @param array|null $cfg 已加载/已合并的配置
+ * @param string     $format 失败时的响应格式：`text`（默认，HTML 页面用）或 `json`（API 用）
+ */
+if (!function_exists('jwt_secret_or_503')) {
+    function jwt_secret_or_503(?array $cfg = null, string $format = 'text'): string
+    {
+        try {
+            $s = jwt_secret($cfg);
+            if ($s !== '') return $s;
+        } catch (Throwable $e) {
+            // 落到下面尝试无参兜底
+        }
+        // ② 无参兜底：只有"库可用"时才可能成功（它会自己 db_connect + mapi_app_config 合并）
+        try {
+            $s = jwt_secret();
+            if ($s !== '') return $s;
+        } catch (Throwable $e) {
+            // 真拿不到 ⇒ 走 ③
+        }
+
+        // ③ 明确失败
+        $msg = '数据库连接不可用，暂时无法生成访问凭据，请稍后重试。'
+             . '（原因：签名密钥存放于数据库 `mapi_config.api_secrets`，库连不上时无法取得）';
+        if (PHP_SAPI === 'cli') {
+            fwrite(STDERR, $msg . "\n");
+            exit(1);
+        }
+        if (!headers_sent()) {
+            header('Retry-After: 30');
+            header($format === 'json'
+                ? 'Content-Type: application/json; charset=utf-8'
+                : 'Content-Type: text/plain; charset=utf-8', true, 503);
+        }
+        http_response_code(503);
+        // API 侧保持 JSON 契约（调用方按 JSON 解析），页面侧给人话纯文本
+        echo $format === 'json'
+            ? json_encode(['ok' => false, 'error' => $msg, 'reason' => 'db_unavailable'], JSON_UNESCAPED_UNICODE)
+            : $msg;
+        exit;
     }
 }

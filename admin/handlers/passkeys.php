@@ -48,7 +48,7 @@ if ($action_key === 'pk-delete') {
     $st->execute();
     if ($st->affected_rows > 0) flash_set('msg','通行密钥已删除');
     else flash_set('err','无权限');
-    header('Location: ?action=profile'); exit;
+    header('Location: ' . admin_url('profile')); exit;
 }
 
 // ═══ 服务设置 ═══

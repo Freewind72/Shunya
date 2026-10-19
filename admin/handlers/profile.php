@@ -32,7 +32,7 @@ if ($action_key === 'profile') {
         $_SESSION['admin_background'] = '';
         $_SESSION['admin_background_url'] = '';
         flash_set('msg', '背景图已删除');
-        header('Location: ?action=profile'); exit;
+        header('Location: ' . admin_url('profile')); exit;
     }
 
     // 个人资料更新
@@ -75,7 +75,7 @@ if ($action_key === 'profile') {
             } else { flash_set('err','更新失败'); }
         }
     } else { flash_set('err','请填写账号'); }
-    header('Location: ?action=profile'); exit;
+    header('Location: ' . admin_url('profile')); exit;
 }
 
 // ═══ 配置管理 ═══

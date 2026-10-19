@@ -80,7 +80,7 @@
             clearTimeout(_t); _t = setTimeout(function(){
                 var el = document.querySelector('.avatar');
                 if (!u) { if (el) el.remove(); return; }
-                fetch('?action=get-avatar&username='+encodeURIComponent(u)).then(function(r){return r.json()}).then(function(d){
+                fetch('/admin/api/?action=get-avatar&username='+encodeURIComponent(u)).then(function(r){return r.json()}).then(function(d){
                     if (!d || !d.avatar) { var e=document.querySelector('.avatar'); if(e)e.remove(); return; }
                     var e = document.querySelector('.avatar');
                     if (!e) { e=document.createElement('img'); e.className='avatar'; var fl=document.querySelector('.push-login .fl,.glass .fl'); if(fl&&fl.querySelector('input[name=username]'))fl.appendChild(e); }
@@ -128,7 +128,7 @@ function pkErrMsg(e){
   return '登录失败：'+(e.message||e.name||'未知错误');
 }
 function passkeyLogin(){
-  fetch('?action=pk-login-begin',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(d){
+  fetch('/admin/api/?action=pk-login-begin',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(d){
     if(d.error){alert(d.error);return}
     if(!d.challenge){alert('获取挑战失败，请刷新重试');return}
     return navigator.credentials.get({publicKey:{challenge:b64urlToBuf(d.challenge),rpId:d.rpId,timeout:d.timeout||120000,userVerification:d.userVerification||'preferred'}});
@@ -136,9 +136,9 @@ function passkeyLogin(){
     if(!cred)return;
     var ad=bufToB64url(cred.response.authenticatorData),sig=bufToB64url(cred.response.signature),cjd=bufToB64url(cred.response.clientDataJSON),cid=bufToB64url(cred.rawId);
     var fd=new FormData();fd.append('authenticatorData',ad);fd.append('signature',sig);fd.append('clientDataJSON',cjd);fd.append('credentialId',cid);
-    return new Promise(function(r){setTimeout(r,200)}).then(function(){return fetch('?action=pk-login-complete',{method:'POST',body:fd,credentials:'same-origin'})}).then(function(r){return r.json()});
+    return new Promise(function(r){setTimeout(r,200)}).then(function(){return fetch('/admin/api/?action=pk-login-complete',{method:'POST',body:fd,credentials:'same-origin'})}).then(function(r){return r.json()});
   }).then(function(d){
-    if(d&&d.ok)window.location.href='?action=dashboard';
+    if(d&&d.ok)window.location.href='/admin/pages/dashboard/';
     else if(d)alert('登录失败：'+(d.err||'未知错误'));
   }).catch(function(e){
     alert(pkErrMsg(e));
@@ -160,7 +160,7 @@ function sendCode(){
   if(!e||!e.includes('@')){showToast('请输入有效邮箱','err');return}
   var btn=document.getElementById('sendCodeBtn');btn.textContent='发送中...';btn.disabled=true;
   var f=new FormData();var ci=document.querySelector('input[name=_csrf]');f.append('email',e);f.append('send_code','1');if(ci)f.append('_csrf',ci.value);
-  fetch('?action=register',{method:'POST',body:f,credentials:'same-origin'}).then(function(r){
+  fetch('/admin/api/?action=register',{method:'POST',body:f,credentials:'same-origin'}).then(function(r){
     if(!r.ok)throw Error('HTTP '+r.status);
     return r.json();
   }).then(function(d){
@@ -168,7 +168,7 @@ function sendCode(){
     else{showToast(d.err||'发送失败','err');btn.textContent='发送验证码';btn.disabled=false}
   }).catch(function(e){
     var fd=new FormData();fd.append('name','send_code_err');fd.append('message',e.message||'unknown');
-    navigator.sendBeacon('?action=js-log',fd);
+    navigator.sendBeacon('/admin/api/?action=js-log',fd);
     showToast('请求失败','err');btn.textContent='发送验证码';btn.disabled=false
   });
 }
@@ -177,7 +177,7 @@ function sendCodeD(){
   if(!e||!e.includes('@')){showToast('请输入有效邮箱','err');return}
   var btn=document.getElementById('sendCodeBtnD');btn.textContent='发送中...';btn.disabled=true;
   var f=new FormData();var ci=document.querySelector('input[name=_csrf]');f.append('email',e);f.append('send_code','1');if(ci)f.append('_csrf',ci.value);
-  fetch('?action=register',{method:'POST',body:f,credentials:'same-origin'}).then(function(r){
+  fetch('/admin/api/?action=register',{method:'POST',body:f,credentials:'same-origin'}).then(function(r){
     if(!r.ok)throw Error('HTTP '+r.status);
     return r.json();
   }).then(function(d){
@@ -185,7 +185,7 @@ function sendCodeD(){
     else{showToast(d.err||'发送失败','err');btn.textContent='发送验证码';btn.disabled=false}
   }).catch(function(e){
     var fd=new FormData();fd.append('name','sendCodeD_err');fd.append('message',e.message||'unknown');
-    navigator.sendBeacon('?action=js-log',fd);
+    navigator.sendBeacon('/admin/api/?action=js-log',fd);
     showToast('请求失败','err');btn.textContent='发送验证码';btn.disabled=false
   });
 }

@@ -183,12 +183,20 @@ function cover_gc_stats($db, int $minAgeDays = 7): array
  *   ② 对象：refs=0 且过了保留期 → 删存储对象 + 删行，腾出空间
  * 保留期是故意的：歌单删了又加回来时，同一张图还在桶里能直接复用（sha256 命中），
  * 不必再回源抓一次；只有"确实没人用了"的才回收。
+ *
+ * @param bool $strictRefs 删除前**再查一次该对象的实时 refs**，非 0 就跳过。
+ *   默认 false（保持既有调用方行为不变）。「清空回收池」那条破坏性入口用 true ——
+ *   S3 删除不可恢复，多一次读换"绝不误删有引用的对象"是划算的。
  */
-function cover_gc($db, int $minAgeDays = 7, int $limit = 500, bool $dryRun = false): array
+function cover_gc($db, int $minAgeDays = 7, int $limit = 500, bool $dryRun = false, bool $strictRefs = false): array
 {
     @set_time_limit(0);
     $res = ['refs_fixed' => 0, 'index_orphans' => 0, 'objects_removed' => 0, 'bytes_freed' => 0,
-            'objects_failed' => 0, 'dry_run' => $dryRun, 'errors' => []];
+            'objects_failed' => 0, 'skipped_referenced' => 0, 'dry_run' => $dryRun, 'errors' => [], 'truncated' => false];
+    // 墙钟预算：`@set_time_limit(0)` 拿掉了 PHP 的时间上限，而每个对象一次 S3 删除 ——
+    // 存储端黑洞时（s3_delete 现在有 15s 超时兜底）几百个对象仍可能跑很久。
+    // 超预算就停下并如实报告，剩下的下轮再回收（本函数天然幂等可续）。
+    $deadline = microtime(true) + 45.0;
 
     // ⓪ 先把引用计数校准一遍：绕过 cover_song_unset() 的删除（直接改库、级联删用户）
     //    会让 refs 虚高、orphaned_at 为空 —— 不校准的话这些对象回收池永远看不到。
@@ -196,6 +204,7 @@ function cover_gc($db, int $minAgeDays = 7, int $limit = 500, bool $dryRun = fal
 
     // ① 孤儿索引行
     foreach (cover_index_orphans($db, 0) as $ref) {
+        if (microtime(true) > $deadline) { $res['truncated'] = true; break; }
         $refEsc = $db->real_escape_string($ref);
         $sha = '';
         $r = $db->query("SELECT sha256 FROM mapi_song_covers WHERE song_ref='$refEsc'");
@@ -216,7 +225,23 @@ function cover_gc($db, int $minAgeDays = 7, int $limit = 500, bool $dryRun = fal
                      ORDER BY orphaned_at ASC LIMIT $lim");
     while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
     foreach ($rows as $o) {
+        if (!$res['truncated'] && microtime(true) > $deadline) { $res['truncated'] = true; break; }
         if ($dryRun) { $res['objects_removed']++; $res['bytes_freed'] += (int)$o['bytes']; continue; }
+
+        // 第二道防线（仅 strictRefs）：上面那句 SQL 读的是"这一瞬间"的 refs，
+        // 而删除是不可恢复的 ⇒ 真删之前**再查一次实时 refs**，非 0 就跳过。
+        // 宁可少删（下轮再来），绝不误删还有引用的对象 ✗。
+        if ($strictRefs) {
+            $shaE = $db->real_escape_string((string)$o['sha256']);
+            $rc = $db->query("SELECT refs FROM mapi_cover_objects WHERE sha256='$shaE'");
+            $cur = ($rc && $rx = $rc->fetch_assoc()) ? (int)$rx['refs'] : -1;
+            if ($cur !== 0) {           // -1 行已不在；>0 又被引用回来了 ⇒ 都跳过
+                $res['skipped_referenced']++;
+                if (count($res['errors']) < 5) $res['errors'][] = $o['object_key'] . ': 删除前复查发现引用数=' . $cur . '，已跳过';
+                continue;
+            }
+        }
+
         if (s3_delete((string)$o['object_key'])) {
             $shaEsc = $db->real_escape_string((string)$o['sha256']);
             $db->query("DELETE FROM mapi_cover_objects WHERE sha256='$shaEsc'");

@@ -80,7 +80,12 @@
             }
             MP.checkTheme();
             var pls = (window.__mszeph_config.playlists || []).map(function(p){ p.type = p.type || 'playlist'; return p; });
-            if (pls && pls.length) { MP.playlists = pls; MP.loadInitialPlaylist(); }
+            if (pls && pls.length) {
+                MP.playlists = pls;
+                MP.loadInitialPlaylist();
+                // 与 get-config 分支同理：加载播放器就顺手让服务端同步一次（服务端按歌单各自 10 分钟冷却防滥用）
+                if (typeof MP.syncPlaylistsSoon === 'function') MP.syncPlaylistsSoon();
+            }
             else { MP._showNoPlaylistNotice(); }
             return;
         }
@@ -130,6 +135,10 @@
                             MP.loadInitialPlaylist();
                             // 状态云同步：本机没有状态时，用云端那份接着听（cookie 丢了/换浏览器）
                             if (typeof MP._cloudPull === 'function') MP._cloudPull();
+                            // 远程歌单自动同步：不管嵌入到哪个站点，加载播放器就顺手让服务端同步一次。
+                            // 服务端按**每个歌单各自 10 分钟**冷却防滥用，所以这里每次访问都调也不会打上游。
+                            // 刻意不 await、不阻塞播放：同步结果下次刷新生效。
+                            MP.syncPlaylistsSoon();
                         }
                         else { MP._showNoPlaylistNotice(); }
                     } else if (data && data.config && data.config.domain && data.config.domain.blocked) {
@@ -818,6 +827,34 @@
     // 兼容旧调用名（引擎内部统一走 MP._startCustomLoad）
     MP._loadCustomPlaylist = function(pl, signal) {
         return MP._startCustomLoad(MP.currentPlaylistIndex, pl, signal);
+    };
+
+    // 远程歌单自动同步（服务端按每个歌单各自 10 分钟冷却防滥用）。
+    // 无论播放器被嵌到哪个站点，只要加载成功就打一次；失败静默忽略 ——
+    // 这是"顺手刷新"，绝不能因为它出错而影响播放。
+    MP.syncPlaylistsSoon = function() {
+        if (MP._syncDone) return;
+        MP._syncDone = true;
+        try {
+            var url = _.API_BASE + '?action=sync-playlists&token=' + encodeURIComponent(_.API_TOKEN || _.API_KEY || '')
+                + (typeof MP._devParam === 'function' ? MP._devParam() : '');
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.timeout = 20000;      // 同步要打上游，给宽一点；超时就算了
+            xhr.onload = function() {
+                // 同步真的写进新歌时，让本次会话下次加载拿到新快照：清掉已加载缓存，不打断当前播放
+                try {
+                    var d = JSON.parse(xhr.responseText);
+                    if (d && d.ok && d.synced && d.synced.length) {
+                        var added = 0;
+                        for (var i = 0; i < d.synced.length; i++) added += (d.synced[i].added || 0);
+                        if (added > 0) MP._allSongs = {};   // 下次切歌单/重载时重新拉
+                    }
+                } catch (e) {}
+            };
+            xhr.onerror = xhr.ontimeout = function() {};
+            xhr.send();
+        } catch (e) {}
     };
 
     // 远端歌单 / 单曲列表：单次请求（失败必须抛出，否则“失败→重试”路径永远不可达）

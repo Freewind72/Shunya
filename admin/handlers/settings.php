@@ -33,15 +33,41 @@ if (in_array($action_key, ['settings','settings-site','settings-mail','settings-
     csrf_require();
     if (isset($_POST['_geetest_submit'])) {
         $geetestCaptchaId = trim($_POST['geetest_captcha_id'] ?? '');
-        $geetestKey = trim($_POST['geetest_key'] ?? '');
-        $r = $db->query("SELECT COUNT(*) as cnt FROM mapi_geetest");
-        $exists = $r && (int)$r->fetch_assoc()['cnt'] > 0;
-        if ($exists) {
-            $st = $db->prepare("UPDATE mapi_geetest SET captcha_id=?, `key`=?");
-            $st->bind_param('ss', $geetestCaptchaId, $geetestKey);
+        $geetestKeyRaw    = trim($_POST['geetest_key'] ?? '');
+        $gRow = null;
+        $r = $db->query("SELECT id, captcha_id, `key` FROM mapi_geetest ORDER BY id ASC LIMIT 1");
+        if ($r && $x = $r->fetch_assoc()) $gRow = $x;
+        if ($gRow) {
+            // ★ 两个真 bug 一起修：
+            //   ① 旧 SQL 是 `UPDATE mapi_geetest SET captcha_id=?, key=?` —— **没有 WHERE**！
+            //      现在只有 1 行所以"看着没事"，一旦多行就会**全表覆盖**（把 A 行的值写到 B 行）。
+            //      改为按主键定位那一行。
+            //   ② 旧代码把 `$_POST` 的值**无条件**写进去 ⇒ 只提交 captcha_id 的表单会把 `key` 清空。
+            //      改为"键不在请求里 ⇒ 不动"。这不是理论问题：设置页有多个卡片共用一个 POST 出口。
+            //   ③ 掩码回显（页面显示 `••••1234`）⇒ **掩码形态视为未修改**，否则掩码会被当密钥存进去。
+            $gCaptcha = array_key_exists('geetest_captcha_id', $_POST) ? $geetestCaptchaId : (string)$gRow['captcha_id'];
+            if (array_key_exists('geetest_key', $_POST)) {
+                if ($geetestKeyRaw === '') {
+                    // 页面承诺"留空则关闭极验" ⇒ **显式清空**（不是"未修改"）。
+                    // ⚠ 但极验的开关判据是 `captcha_id !== '' && key !== ''`（见 admin/login/index.php:326 的 $geetestOn）
+                    //   ⇒ 只清 key 会让页面显示"已关闭"而实际**仍然开着照样校验**（静默不一致）。
+                    //   所以这里把 captcha_id 一起清掉，让"关闭"真的成立。
+                    $gKey = '';
+                    $gCaptcha = '';
+                } elseif (mb_substr($geetestKeyRaw, 0, 1) === '•') {
+                    $gKey = (string)$gRow['key'];        // 掩码 = 未修改（页面回显的是 `••••1234`）
+                } else {
+                    $gKey = $geetestKeyRaw;              // 真填了新密钥 ⇒ 覆盖
+                }
+            } else {
+                $gKey = (string)$gRow['key'];            // 键没出现 ⇒ 不动
+            }
+            $gid = (int)$gRow['id'];
+            $st = $db->prepare("UPDATE mapi_geetest SET captcha_id=?, `key`=? WHERE id=?");
+            $st->bind_param('ssi', $gCaptcha, $gKey, $gid);
         } else {
             $st = $db->prepare("INSERT INTO mapi_geetest (captcha_id, `key`) VALUES (?, ?)");
-            $st->bind_param('ss', $geetestCaptchaId, $geetestKey);
+            $st->bind_param('ss', $geetestCaptchaId, $geetestKeyRaw);
         }
         if ($st->execute()) flash_set('msg', '极验配置已保存');
         else flash_set('err', '保存失败');
@@ -70,6 +96,47 @@ if (in_array($action_key, ['settings','settings-site','settings-mail','settings-
         $st->bind_param('s', $loginBg); $st->execute();
         flash_set('msg', '登录页配置已保存');
     }
+    // ── 演示播放器：首页「启动播放器」用哪条密钥 ────────────────────────────
+    //
+    // ★ 必须做**服务端归属校验**，不能信前端：
+    //   `demo_key` 会被拼进首页 HTML（`<script src="api.php?key=…">`）下发给所有访客，
+    //   若允许提交任意密钥，就等于让任何后台用户把**别人的**密钥公开到站点首页。
+    //   所以这里按「属于当前登录者 且 已启用」双重条件落库，与页面下拉框的筛选口径一致。
+    //   超管（is_admin=0）同样只限自己的密钥 —— 这是产品要求，也是最小权限。
+    if (isset($_POST['_demo_submit'])) {
+        $demoKeyNew = trim((string)($_POST['demo_key'] ?? ''));
+        $demoOwnerId = (int)($_SESSION['admin_id'] ?? 0);
+        $demoCheckOk = true;
+        if ($demoKeyNew !== '') {
+            // 归属 + 启用 双重校验（与页面下拉框筛选口径一致）
+            $demoCheckOk = false;
+            if ($demoOwnerId > 0) {
+                $dSt = $db->prepare(
+                    "SELECT id FROM mapi_keys WHERE api_key=? AND user_id=? AND status=1 LIMIT 1"
+                );
+                if ($dSt) {
+                    $dSt->bind_param('si', $demoKeyNew, $demoOwnerId);
+                    $dSt->execute();
+                    $dRes = $dSt->get_result();
+                    $demoCheckOk = (bool)($dRes && $dRes->fetch_assoc());
+                }
+            }
+        }
+        if (!$demoCheckOk) {
+            // 只提示、不写库：避免非法值把原有正确配置覆盖掉。
+            // ⚠ 这里不能 `return;` —— 本文件末尾还有统一的回跳（L447），
+            //   提前 return 会让页面停在一个空响应上。
+            flash_set('err', '只能选择你自己的、且已启用的密钥');
+        } else {
+            // 读-改-写：只动 demo_key，`jwt_secret` 原样保留（这正是不能整行 REPLACE 的原因）
+            $demoRes = save_mapi_config_section($db, 'api_secrets', ['demo_key' => $demoKeyNew]);
+            if (!empty($demoRes['ok'])) {
+                flash_set('msg', $demoKeyNew === '' ? '演示播放器已关闭' : '演示播放器已更新');
+            } else {
+                flash_set('err', '保存失败：' . (string)($demoRes['error'] ?? '未知错误'));
+            }
+        }
+    }
     if (isset($_POST['_key_limit_submit']) && ($_SESSION['admin_is_admin'] ?? 99) === 0) {
         $limit = max(1, min(100, (int)($_POST['key_limit'] ?? 1)));
         $json = json_encode(['limit' => $limit], JSON_UNESCAPED_UNICODE);
@@ -79,19 +146,27 @@ if (in_array($action_key, ['settings','settings-site','settings-mail','settings-
         else flash_set('err', '保存失败');
     }
     if (isset($_POST['_s3_submit']) && ($_SESSION['admin_is_admin'] ?? 99) === 0) {
-        $s3Save = [
-            'endpoint' => trim($_POST['s3_endpoint'] ?? ''),
-            'access_key' => trim($_POST['s3_access_key'] ?? ''),
-            'secret_key' => trim($_POST['s3_secret_key'] ?? ''),
-            'bucket' => trim($_POST['s3_bucket'] ?? ''),
-            'region' => trim($_POST['s3_region'] ?? 'auto'),
-            'path_prefix' => trim($_POST['s3_path_prefix'] ?? ''),
-            'custom_domain' => trim($_POST['s3_custom_domain'] ?? ''),
-        ];
-        $json = json_encode($s3Save, JSON_UNESCAPED_UNICODE);
-        $st = $db->prepare("REPLACE INTO mapi_config (config_key, config_value) VALUES ('s3', ?)");
-        $st->bind_param('s', $json);
-        if ($st->execute()) flash_set('msg', 'S3 配置已保存');
+        // ★ 同 SMTP：以前整行 REPLACE，少带的字段会被清空（尤其 `secret_key`）。
+        //   注意 `secret_key` 也是掩码字段：空着提交 = 不改（否则一次保存就把密钥抹掉）。
+        $s3Res = merge_mapi_config_from_post($db, 's3', [
+            'endpoint'      => 's3_endpoint',
+            'access_key'    => 's3_access_key',
+            'secret_key'    => 's3_secret_key',
+            'bucket'        => 's3_bucket',
+            'region'        => 's3_region',
+            'path_prefix'   => 's3_path_prefix',
+            'custom_domain' => 's3_custom_domain',
+        ], [
+            'transform' => [
+                // 掩码或空串 = 未修改 ⇒ 不动（与 `smtp.pass` 同理，见上面的说明）
+                'secret_key' => static function ($v) use ($db) {
+                    if ($v !== '' && mb_substr($v, 0, 1) !== '•') return $v;
+                    $cur = read_mapi_config_section($db, 's3');
+                    return array_key_exists('secret_key', $cur) && (string)$cur['secret_key'] !== '' ? null : $v;
+                },
+            ],
+        ]);
+        if ($s3Res['ok']) flash_set('msg', 'S3 配置已保存');
         else flash_set('err', '保存失败');
     }
     // 「保存」与「保存并测试」都会落库：以前"测试连接"只探不存，用户改完点它 → 表单弹回旧值，
@@ -223,53 +298,83 @@ if (in_array($action_key, ['settings','settings-site','settings-mail','settings-
         flash_set($d['ok'] ? 'msg' : 'err', '已保存并测试：' . $d['msg'] . '（' . $d['target'] . '，前缀 ' . $d['prefix'] . '）' . $autoNote . $clampNote);
     }
     if (isset($_POST['_api_submit']) && ($_SESSION['admin_is_admin'] ?? 99) === 0) {
-        $apiSave = [
-            'meting' => trim($_POST['api_meting'] ?? ''),
-            'qq_referer' => trim($_POST['api_qq_referer'] ?? ''),
-            'qq_cover' => trim($_POST['api_qq_cover'] ?? ''),
-            'param_id' => trim($_POST['api_param_id'] ?? 'id') ?: 'id',
-            'param_auth' => trim($_POST['api_param_auth'] ?? 'auth') ?: 'auth',
-            'req_params' => [
-                'server' => trim($_POST['api_req_server'] ?? 'server') ?: 'server',
-                'type' => trim($_POST['api_req_type'] ?? 'type') ?: 'type',
-                'id' => trim($_POST['api_req_id'] ?? 'id') ?: 'id',
+        // ★ 统一走共享收口点 `merge_mapi_config_from_post()`（定义在 assets/lib/api_config.php）。
+        //   为什么要收成一个函数：这种"拿请求里的部分字段拼一整行再 REPLACE"的形状在本会话
+        //   已出现**三次**（`websocket.api_url` / `mapi_api` / 更早的"上游音频 API 地址被清空"）——
+        //   说明它不是某一处写错，而是**写法成片存在**。每个 handler 各修一份等于等着第四次，
+        //   所以"怎么从表单生成 patch"只允许有一个实现，各处只声明字段映射。
+        //   规则（与 `save_mapi_config_section()` 一致）：
+        //     · POST 键不在请求里 ⇒ 不进 patch ⇒ 库里保持原值（不误伤别的卡片/脚本/旧表单）
+        //     · POST 键在请求里 ⇒ 写入该值；空串就是**显式清空**（读取器会回落 config.php 的 api 段）
+        //     · `req_params` / `fields` 是嵌套对象 ⇒ **逐子键合并**，不整块替换
+        //   ⚠ 字段映射里的**存储键**必须与历史一致（`meting`/`req_params`/`fields`），
+        //     不能写视图形键（`base_url`/`field_*`）—— 混两种形状会把这一行写坏（踩过）。
+        $apiRes = merge_mapi_config_from_post($db, 'mapi_api', [
+            'meting'     => 'api_meting',
+            'qq_referer' => 'api_qq_referer',
+            'qq_cover'   => 'api_qq_cover',
+            'param_id'   => 'api_param_id',
+            'param_auth' => 'api_param_auth',
+            'req_params' => [['api_req_server', 'server'], ['api_req_type', 'type'], ['api_req_id', 'id']],
+            'fields'     => [['api_field_title', 'title'], ['api_field_artist', 'artist'],
+                             ['api_field_url', 'url'], ['api_field_pic', 'pic'], ['api_field_lrc', 'lrc']],
+        ], [
+            // 页面文案是"留空则用默认" ⇒ 这两个键空串时写默认值，而不是清空
+            'defaults' => [
+                'param_id' => 'id', 'param_auth' => 'auth',
+                'req_params.server' => 'server', 'req_params.type' => 'type', 'req_params.id' => 'id',
+                'fields.title' => 'title', 'fields.artist' => 'author', 'fields.url' => 'url',
+                'fields.pic' => 'pic', 'fields.lrc' => 'lrc',
             ],
-            'fields' => [
-                'title' => trim($_POST['api_field_title'] ?? 'title') ?: 'title',
-                'artist' => trim($_POST['api_field_artist'] ?? 'author') ?: 'author',
-                'url' => trim($_POST['api_field_url'] ?? 'url') ?: 'url',
-                'pic' => trim($_POST['api_field_pic'] ?? 'pic') ?: 'pic',
-                'lrc' => trim($_POST['api_field_lrc'] ?? 'lrc') ?: 'lrc',
-            ],
-        ];
-        $json = json_encode($apiSave, JSON_UNESCAPED_UNICODE);
-        $st = $db->prepare("REPLACE INTO mapi_config (config_key, config_value) VALUES ('mapi_api', ?)");
-        $st->bind_param('s', $json);
-        if ($st->execute()) flash_set('msg', '音乐 API 配置已保存');
-        else flash_set('err', '保存失败');
+        ]);
+        $apiOk = (bool)$apiRes['ok'];
 
-        $cfgData = require $configFile;
-        if (!isset($cfgData['api'])) $cfgData['api'] = [];
-        $cfgData['api']['base_url']   = $apiSave['meting'];
-        $cfgData['api']['qq_referer'] = $apiSave['qq_referer'];
-        $cfgData['api']['qq_cover']   = $apiSave['qq_cover'];
-        $newContent = "<?php\nreturn " . var_export($cfgData, true) . ";\n";
-        file_put_contents($configFile, $newContent);
+        // WebSocket/实时通道（歌厅）已于 2026-10-20 随歌厅功能一并下线，
+        // 本分支不再读写 websocket 配置行。保存结果只看音乐 API。
+        if ($apiOk) {
+            flash_set('msg', '音乐 API 配置已保存');
+        } else {
+            flash_set('err', '保存失败');
+        }
+        // ⚠ 这里**故意不再写回 `config/config.php`**（2026-10-16 用户批准删除）。
+        //   旧行为：保存「音乐 API」时，除写库外还 `file_put_contents($configFile, ...)`，
+        //   把 `api.base_url/qq_referer/qq_cover` 重新塞回文件。两个后果都很坏：
+        //     ① 用户点一次保存，已经从文件删掉的 `api` 段就**复活一段** ⇒
+        //        "配置从文件搬进库、按功能暴露到后台"会被逐步推翻（实测 05:26:22 文件从 256 B 变 395 B）；
+        //     ② 它是 `var_export` 整文件重写 ⇒ 把 config.php 里的注释**全部剥掉**，且不可逆。
+        //   ⇒ **库现在是唯一来源**；文件只由 **install 初始化**写（首次安装要落一个能启动的 db 段）。
+        //   ⇒ 设置页保存只走 `save_mapi_config_section()`（读-改-写），不碰文件。
     }
     if (isset($_POST['smtp_host']) && ($_SESSION['admin_is_admin'] ?? 99) === 0) {
-        $smtpSave = [
-            'host' => trim($_POST['smtp_host'] ?? ''),
-            'port' => (int)($_POST['smtp_port'] ?? 465),
-            'user' => trim($_POST['smtp_user'] ?? ''),
-            'pass' => trim($_POST['smtp_pass'] ?? ''),
-            'encrypt' => in_array($_POST['smtp_encrypt'] ?? '', ['ssl','tls','none']) ? $_POST['smtp_encrypt'] : 'ssl',
-            'from' => trim($_POST['smtp_from'] ?? ''),
-            'name' => trim($_POST['smtp_name'] ?? ''),
+        // ★ 收口到 `merge_mapi_config_from_post()`：以前不论请求里有没有这些字段，都拼一个
+        //   **完整** $smtpSave 再 REPLACE 整行 ⇒ 任何少带字段的提交都会把没带的键清空
+        //   （尤其 `pass`：空着提交会把已存密码抹掉）。现在键不在请求里就不动。
+        $smtpMap = [
+            'host'    => 'smtp_host',
+            'port'    => 'smtp_port',
+            'user'    => 'smtp_user',
+            'pass'    => 'smtp_pass',
+            'encrypt' => 'smtp_encrypt',
+            'from'    => 'smtp_from',
+            'name'    => 'smtp_name',
         ];
-        $json = json_encode($smtpSave, JSON_UNESCAPED_UNICODE);
-        $st = $db->prepare("REPLACE INTO mapi_config (config_key, config_value) VALUES ('smtp', ?)");
-        $st->bind_param('s', $json);
-        if ($st->execute()) flash_set('msg', 'SMTP 配置已保存');
+        $smtpRes = merge_mapi_config_from_post($db, 'smtp', $smtpMap, [
+            'transform' => [
+                // 端口钳到合理范围（原来直接 (int)，0/负数/超大值都会写进去）
+                'port' => static fn($v) => (string)max(1, min(65535, (int)$v)),
+                // 加密方式只认三个取值，非法值按 ssl（与旧行为一致）
+                'encrypt' => static fn($v) => in_array($v, ['ssl', 'tls', 'none'], true) ? $v : 'ssl',
+                // 密码：页面回显的是掩码 `••••1234`；**掩码形态 或 空串 都视为"未修改"** ⇒ 不动该键。
+                //   为什么必须认掩码：掩码不是真密码，若当新值存进去，用户下次就登不上，
+                //   而界面看着"保存成功"（静默损坏）。规则与 `websocket` 段一致。
+                'pass' => static function ($v) use ($db) {
+                    if ($v !== '' && mb_substr($v, 0, 1) !== '•') return $v;   // 真填了新密码 ⇒ 覆盖
+                    $cur = read_mapi_config_section($db, 'smtp');
+                    return array_key_exists('pass', $cur) && (string)$cur['pass'] !== '' ? null : $v;
+                },
+            ],
+        ]);
+        if ($smtpRes['ok']) flash_set('msg', 'SMTP 配置已保存');
         else flash_set('err', '保存失败');
     }
     // 邮件模板 — 自动建表 + 迁移旧数据
@@ -339,9 +444,9 @@ if (in_array($action_key, ['settings','settings-site','settings-mail','settings-
         }
         // 非 AJAX 则重定向
         if (!(isset($_POST['_mail_tpl_save']) || isset($_POST['_mail_tpl_delete']) || isset($_POST['_mail_tpl_default']))) {
-            header('Location: ?action=' . $action_key); exit;
+            header('Location: ' . admin_url((string)$action_key)); exit;
         }
         exit;
     }
-    header('Location: ?action=' . $action_key); exit;
+    header('Location: ' . admin_url((string)$action_key)); exit;
 }
