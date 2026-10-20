@@ -223,6 +223,26 @@
                     ? '@import url("' + url + '");'
                     : "@font-face{font-family:'" + (MP._lrcFontFamily(url, name) || 'MsapiLrcFont') + "';src:url('" + url + "');font-display:swap}";
             }
+            // ── 换页兜底（2026-10-20）：Pjax/Swup 类框架换页会整体替换 document.head，
+            // 字体 <style> 随之被抹掉而无人重放（幂等启动守卫又让播放器脚本静默退出），
+            // 歌词条/沉浸歌词就退回默认字体。挂一个 MutationObserver 监听 head 的
+            // 子树变化，发现 #mapi-lrc-font 没了就立即补回（每次重建都刷新本观察器的
+            // 记录，不会死循环：补回节点本身是 head 的合法变更，节点存在则不做任何事）。
+            if (!MP._lrcFontGuard && document.head && typeof MutationObserver === 'function') {
+                try {
+                    MP._lrcFontGuard = new MutationObserver(function() {
+                        if ((MP._lrcFont || {}).url && !document.getElementById('mapi-lrc-font')) {
+                            var st2 = document.createElement('style');
+                            st2.id = 'mapi-lrc-font';
+                            document.head.appendChild(st2);
+                            var cfg2 = MP._lrcFont;
+                            MP._lrcFontSig = null;               // 强制下次走重建（立即）
+                            MP.applyLrcFont({ url: cfg2.url, name: cfg2.name, size: cfg2.size });
+                        }
+                    });
+                    MP._lrcFontGuard.observe(document.head, { childList: true, subtree: true });
+                } catch (e) { /* 老环境不支持观察器：换页后重执行脚本那条路兜底 */ }
+            }
         }
         MP._applyLrcFontStyles(document.querySelector('[data-mp="lrc"]'));
         // 皮肤自己也画歌词的（沉浸式歌词）在这里跟上来；皮肤没实现这个钩子就什么都不做

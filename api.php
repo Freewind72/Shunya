@@ -230,7 +230,26 @@ $router_js = <<<'JS'
         }
     })();
 
-    if (_ALREADY_BOOTED) return;   // 同一个播放器已在运行: 静默退出, 不重复建 UI / 不重复起音频
+    if (_ALREADY_BOOTED) {
+        // ═══ 换页重执行：播放器活着，但要补回被宿主换页抹掉的东西 ═══
+        // Halo / Pjax 类主题换页时会整体替换 document.head —— 播放器注入的
+        // <style id="mapi-lrc-font">（@font-face 歌词条自定义字体）随之被抹掉。
+        // 播放器 UI 在 shadow DOM / body 里不受影响，于是出现「换页后歌词条
+        // 字体退回默认」：字体定义没了，@font-face 不再生效，MsapiLrcFont 解析失败
+        // 掉回 fallback —— 看起来就像字体加载被"抵消"了。
+        // 修法与主题「换页后重新注入自己字体」同一思路：这里按当前配置重放一次
+        // applyLrcFont。它内部按 sig 判重，所以先把 _lrcFont 置 null 强制走重建分支；
+        // style 元素已不在 DOM 时会重新注入。幂等，重复换页也不会堆积 <style>。
+        try {
+            if (window.MP && typeof MP.applyLrcFont === 'function' && MP._lrcFont) {
+                var _saved = MP._lrcFont;
+                MP._lrcFontSig = null;              // sig 存在独立字段里，必须一并清掉才会走重建分支
+                MP._lrcFont = null;
+                MP.applyLrcFont({ url: _saved.url, name: _saved.name, size: _saved.size });
+            }
+        } catch (e) { /* 字体重放失败不影响播放器本身 */ }
+        return;   // 同一个播放器已在运行: 静默退出, 不重复建 UI / 不重复起音频
+    }
 
     // ═══ 强制 UTF-8 编码 ═══
     (function(){
