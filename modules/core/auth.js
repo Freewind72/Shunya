@@ -7,7 +7,7 @@
         if (typeof MP.notice === 'function') { MP.notice(code, level ? { level: level } : undefined); return; }
         var err = document.createElement('div');
         err.textContent = code === 'no_key' ? '\u7f3a\u5c11 API Key\uff0c\u64ad\u653e\u5668\u65e0\u6cd5\u52a0\u8f7d' : String(code);
-        err.style.cssText = 'position:fixed;top:16px;right:16px;z-index:2147483647;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:500;background:rgba(108,92,231,.92);color:#fff;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,.2);transform:translateX(120%);opacity:0;transition:all .4s cubic-bezier(.4,0,.2,1);pointer-events:none';
+        err.style.cssText = 'position:fixed;top:16px;right:16px;z-index:2147483647;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:500;background:rgba(108,92,231,.92);color:#fff;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,.2);transform:translateX(120%);opacity:0;transition:all .4s cubic-bezier(.4,0,.2,1);pointer-events:none;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
         document.body.appendChild(err);
         requestAnimationFrame(function(){ err.style.transform = 'translateX(0)'; err.style.opacity = '1'; });
         setTimeout(function(){ err.style.transform = 'translateX(120%)'; err.style.opacity = '0'; setTimeout(function(){ err.remove(); }, 400); }, 5000);

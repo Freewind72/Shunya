@@ -177,10 +177,14 @@
 
     // 皮肤（沉浸式歌词等）用的公开接口：现成的 font-family 值；字号 0 = 皮肤用自己的默认字号。
     // 皮肤不要直接读 MP._lrcFont —— 那里是引擎内部状态。
+    // ⚠ 永远返回非空值（2026-10-20 修）：歌词条是挂在宿主 body 下的 position:fixed 元素，
+    //   返回空串意味着内联 font-family 为空 → 继承宿主 body 的全局字体
+    //   （bmwy72.top 的主题会注入 body{font-family:"EtherealCustomFont"...}，
+    //   歌词条就被宿主字体污染了）。没配置自定义字体时也必须钉死引擎自己的字体栈。
     MP.lrcFontFamilyCss = function() {
         var f = MP._lrcFont || {};
         var fam = MP._lrcFontFamily(f.url, f.name);
-        return fam ? ("'" + fam + "'," + MP._LRC_FONT_FALLBACK) : '';
+        return fam ? ("'" + fam + "'," + MP._LRC_FONT_FALLBACK) : MP._LRC_FONT_FALLBACK;
     };
 
     MP.lrcFontSize = function() {
