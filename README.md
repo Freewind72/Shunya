@@ -1,24 +1,16 @@
-<div align="center">
-
 # 顺雅 Shunya
 
 **你的网站，自带旋律。**
 
-基于 Shadow DOM 隔离的轻量级嵌入式音乐播放器 —— 一行 `<script>` 接入，与宿主页面零 CSS 冲突
+基于 Shadow DOM 隔离的轻量级嵌入式音乐播放器 —— 一行 `<script>` 接入，与宿主页面零 CSS 冲突。
 
-![PHP](https://img.shields.io/badge/PHP-8.5%2B-777BB4?style=flat-square&logo=php&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-4479A1?style=flat-square&logo=mysql&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=flat-square&logo=sqlite&logoColor=white)
-![APlayer](https://img.shields.io/badge/APlayer-1.10.1-946CE6?style=flat-square)
-![Shadow DOM](https://img.shields.io/badge/Shadow_DOM-closed-000000?style=flat-square)
+技术栈：PHP 8.5+ · MySQL 5.7+ 或 SQLite 3 · 原生 JavaScript + closed Shadow DOM · APlayer 1.10.1（随包自托管）
 
-[特性](#特性) · [界面预览](#界面预览) · [快速开始](#快速开始) · [使用方式](#使用方式) · [项目结构](#项目结构) · [API 端点](#api-端点)
+[特性](#特性) · [快速开始](#快速开始) · [使用方式](#使用方式) · [管理后台](#管理后台) · [目录一览](#目录一览) · [API-端点](#api-端点) · [技术栈](#技术栈)
 
-</div>
+> 本文只说明「怎么用」。**要动手改这个项目的代码，先读 [AGENTS.md](AGENTS.md)** —— 那里写了每件事该改哪个文件、有哪些不能踩的坑，且不抄代码里已有的清单。
 
 ---
-
-![顺雅播放器](docs/images/player.jpg)
 
 ## 特性
 
@@ -37,43 +29,7 @@
 - **播放模式** — 列表循环、单曲循环、随机播放。
 - **Cookie 持久化** — 跨会话记忆音量、歌单、播放进度与主题偏好。
 - **隐私合规** — 内置 Cookie 授权弹窗，用户明确同意后才写入数据。
-- **管理后台** — 在 `/admin/` 中管理 API 密钥、歌单、公告与调用统计。
-
----
-
-## 界面预览
-
-### 落地页
-
-站点首页「顺雅 · 声波宇宙」，深空暗色主题，实时展示接口调用统计。
-
-![落地页](docs/images/hero.jpg)
-
-### 播放器面板
-
-悬浮按钮展开后的控制面板：封面、进度、播放模式、歌词开关、音量增强与歌单列表。
-
-![播放器面板](docs/images/player.jpg)
-
-### 沉浸模式
-
-全屏大封面配合滚动歌词，宛如原生播放器。
-
-![沉浸模式](docs/images/immersive.jpg)
-
-### 移动端
-
-面板在移动端自动收窄，触控拖拽与边缘吸附保持一致。
-
-<p align="center">
-  <img src="docs/images/mobile.jpg" width="330" alt="移动端" />
-</p>
-
-### 管理后台
-
-`/admin/` 后台登录页，支持账号密码与 WebAuthn 通行密钥两种登录方式。
-
-![管理后台](docs/images/admin-login.jpg)
+- **管理后台** — 在 `/admin/` 中管理 API 密钥、歌单、封面、公告、邮件、存储与调用统计。
 
 ---
 
@@ -118,6 +74,16 @@ xdebug.mode    = off
 > `install/` 目录下的安装向导是**唯一**按需开启报错显示的地方：未安装时便于排错，
 > 安装完成后自动关闭（见 `install/includes/guard.php`）。这不替代上面的全局设置。
 
+### 部署前必须配置的两项
+
+写进 `config/config.php`（该文件不入库，每个部署点各自生成）：
+
+| 配置 | 不配的后果 |
+|---|---|
+| `api.jwt_secret` | **必须**填 ≥32 字符高熵随机值（`php -r "echo bin2hex(random_bytes(32));"`）。缺失时签名密钥函数直接抛异常，不会回退到「用数据库密码派生」——那种回退把签名密钥的熵压缩成数据库密码，拖库即可伪造任意 Token |
+| `site.url` | 部署到真实域名时必须改成实际域名。否则 WebAuthn 的域名锚定（RP ID）会退化成跟随请求的 `Host` 头，防钓鱼保证由此丧失 |
+| `api.demo_key` | 落地页「演示播放器」专用密钥。**留空则不显示演示播放器**（安全默认值）。切勿填站长正式密钥：它会被拼进页面 HTML 下发给所有访客 |
+
 ### PHP 内置服务器（快速测试）
 
 ```bash
@@ -149,7 +115,11 @@ php -S 127.0.0.1:8080 -t /path/to/Msapi
 > 原因：密钥放在标签属性上时**服务端读不到**，只有 URL 查询参数才可靠。
 > 老代码请改成上面那一行 —— 旧入口现在只会在控制台打印一句升级提示，不再提供播放器。
 
-#### 同页放多个播放器（必须显式区分）
+> **请务必加上 `defer`。** 这是一个第三方域名的脚本，不加 `defer` 时浏览器会停下来等它下载并执行完
+> 才继续解析页面，直接拖慢首屏；加上 `defer` 后它会在文档解析完成后执行，效果完全一致。
+> 如果宿主平台支持把代码注入到页脚，放在 `</body>` 前同样可以。
+
+### 同页放多个播放器（必须显式区分）
 
 播放器的「重复执行保护」按**配置**去重，而不是按标签位置：同一个 `key` + 同一个 `api`
 （未指定 `data-player-id` 时）会派生出**同一个去重键**，于是同页第二个完全相同的
@@ -168,7 +138,7 @@ php -S 127.0.0.1:8080 -t /path/to/Msapi
 > 这个行为本身是必要的（Swup / Pjax / Turbo 这类无刷新框架会重执行脚本，不能重建播放器），
 > 所以才用显式 `data-player-id` 来表达「我确实要两个」。
 
-### 皮肤
+### 播放器皮肤
 
 皮肤在后台「音乐配置 → 播放器皮肤」里选择，对该账号下所有密钥生效；
 URL 上的 `?route=` 可临时覆盖。
@@ -176,7 +146,7 @@ URL 上的 `?route=` 可临时覆盖。
 | route | 形态 | 特点 |
 |---|---|---|
 | `router` | 悬浮圆钮 + 展开式玻璃面板 | 可拖拽、边缘吸附、顶部停靠、沉浸模式 |
-| `rose` | 玫瑰玻璃**侧边常驻卡片** | **不可拖动**，只贴左右边；贴边橙色箭头收起/展开；自带歌单列表 |
+| `rose` | 玫瑰玻璃**侧边常驻卡片** | **不可拖动**，只贴左右边；贴边橙色箭头收起/展开；自带歌单列表；移动端为底部抽屉 |
 
 ```html
 <!-- 这一处嵌入强制用侧边卡片，不受后台设置影响 -->
@@ -187,9 +157,7 @@ URL 上的 `?route=` 可临时覆盖。
 **新增皮肤 = 在 `modules/<name>/` 下建目录 + 写 `skin.json` + 写 `widget.js`（DOM 与 `MP._css`）
 与皮肤行为文件**，分发器与后台都会自动读到，不需要改任何代码。
 
-> **请务必加上 `defer`。** 这是一个第三方域名的脚本，不加 `defer` 时浏览器会停下来等它下载并执行完
-> 才继续解析页面，直接拖慢首屏；加上 `defer` 后它会在文档解析完成后执行，效果完全一致。
-> 如果宿主平台支持把代码注入到页脚，放在 `</body>` 前同样可以。
+> 皮肤与引擎模块的字段契约、清单装载规则见 `modules/registry.php` 与各 `skin.json` / `core.json`。
 
 ### 对宿主页面的侵入性
 
@@ -199,7 +167,7 @@ URL 上的 `?route=` 可临时覆盖。
 - **不改滚动条** — 不注入任何影响 `html` / `body` 滚动条的样式；播放器自身的滚动区域都在 shadow root 内。
 - **可还原的临时样式** — 沉浸模式会临时锁滚动，退出时还原宿主原本的内联 `overflow` 值，而不是清空。
 
-### 自定义参数
+### 启动脚本支持的属性
 
 嵌入脚本支持在 `<script>` 标签上设置以下属性：
 
@@ -228,91 +196,74 @@ URL 上的 `?route=` 可临时覆盖。
 > 重复执行时只会创建**一个**实例；只有宿主已被移除或启动失败时才会重建。
 > 若要在同一页面放两个播放器，请为它们分别指定不同的 `data-player-id`。
 
-### 通过管理后台配置
+### 首页在未安装 / 从未进过后台的实例上会怎样
+
+落地页 `index.php` 不跑数据库迁移（迁移含 DDL 写操作，不该由匿名访客的 GET 触发，也不该落在访问量最大的入口上）。
+它只做一次**极轻量体检**——判断自己真正会用到的表是否存在，缺失时给出**可操作提示**（去登录后台或跑 `/install/upgrade.php`），
+**不自动补表**。所以「只部署首页、从未进后台」的实例会看到一条醒目提示，而不是白屏。
+
+---
+
+## 管理后台
 
 登录 `/admin/` 后可配置以下项：
 
-- **歌单** — 添加 QQ 音乐或网易云音乐歌单
+- **歌单** — 添加 QQ 音乐或网易云音乐歌单，同步歌曲与封面
+- **封面** — 本地化预热、无用封面回收
 - **主题** — 自动（按时间）或强制浅色 / 深色
 - **自动播放** — 页面加载时是否自动播放
 - **歌词** — 默认歌词显示开关
 - **服务器** — 默认音乐源（腾讯 / 网易）
 - **公告** — 向所有嵌入播放器推送广播消息
+- **密钥 / 域名** — API 密钥管理与按域名的调用授权
+- **用户** — 三级角色账号管理（超管 / 管理员 / 普通用户）
+- **邮件 / 存储** — SMTP 发信、S3 兼容对象存储
+- **缓存** — Redis 播放器缓存（上游解析结果、歌单配置、播放器状态）
+
+> 后台页面地址是**带尾斜杠的目录形态**（`/admin/<action>/`），靠服务器内置的「目录补斜杠 + `index index.php`」跑通，
+> **不需要任何 rewrite / try_files / error_page 配置**。页面清单与 action 白名单的唯一来源是
+> `admin/includes/routes.php`，不在文档里抄。
 
 ---
 
-## 项目结构
+## 目录一览
 
-```
-Msapi/
-├── index.php                  # 落地页（顺雅 · 声波宇宙）
-├── favicon.ico
-├── LICENSE                    # 许可全文
-├── config/
-│   └── config.php             # 数据库与站点配置（安装向导生成）
-├── api.php                    # 播放器总入口：?key=密钥 → 解析皮肤 → 输出启动脚本
-├── modules/                   # 播放器前端（内核 + 皮肤）
-│   ├── api.php                # 旧入口转发壳（兼容存量嵌入，存量迁完可删）
-│   ├── registry.php           # 皮肤清单装载：分发器与后台共用同一份清单
-│   ├── core/                  # 引擎：全站唯一一份，皮肤不得复制
-│   │   ├── auth.js            # 密钥校验与 Cookie 授权
-│   │   ├── state.js           # 状态与 Cookie 持久化（含播放模式菜单）
-│   │   ├── player.js          # APlayer 播放内核 + 生命周期
-│   │   ├── ui.js              # 按 data-mp 契约渲染面板与歌单（与外观无关）
-│   │   ├── lyrics.js          # LRC 解析与歌词同步
-│   │   └── theme.js           # 主题、公告与问候
-│   ├── router/                # 皮肤①：悬浮圆钮 + 玻璃面板（可拖拽停靠）
-│   │   ├── widget.js          # DOM 结构 + shadow root 内联样式
-│   │   ├── drag.js            # 拖拽、边缘吸附、顶部停靠
-│   │   └── immersive.js       # 沉浸全屏模式
-│   └── rose/                  # 皮肤②：玫瑰玻璃侧边卡片（常驻、不可拖动）
-│       ├── widget.js          # DOM 结构 + shadow root 内联样式
-│       └── skin.js            # 侧边定位、收起/展开、皮肤专属交互
-├── assets/
-│   ├── css/                   # 落地页样式（pc / mobile）
-│   ├── js/                    # 落地页交互（pc / mobile）
-│   └── lib/
-│       ├── aplayer/               # APlayer 1.10.1 内核（自托管，免第三方 CDN）
-│       ├── api_config.php     # API 配置读取
-│       ├── db.php             # 数据库抽象层（MySQL / SQLite）
-│       ├── helpers.php        # 通用工具函数
-│       ├── jwt.php            # HS256 JWT 签发与校验
-│       └── widget.php         # 第三方页面嵌入脚本
-├── admin/                     # 管理后台（单入口）
-│   ├── index.php              # 后台入口
-│   ├── api/                   # api.php / qq_api.php / wy_api.php / relay.php
-│   ├── assets/                # pc / mobile 两套资源与 CodeMirror
-│   ├── handlers/              # 各功能处理端点
-│   ├── includes/              # bootstrap / guard / routes / user_init
-│   ├── layout/                # header / footer
-│   ├── lib/                   # auth / mail / s3 / webauthn / cover_cache
-│   └── <action>/index.php      # 页面真身（每个页面 action 一个目录）
-├── install/                   # 安装向导
-│   ├── index.php              # 向导入口
-│   ├── init.php               # 安装逻辑
-│   ├── upgrade.php            # 数据库迁移
-│   ├── handlers/ includes/ lib/
-│   └── sql/                   # mysql.sql / sqlite.sql
-└── docs/images/               # README 截图
-```
+| 路径 | 放什么 |
+|---|---|
+| `api.php` | 播放器总入口（嵌入用，唯一对外入口）：`?key=` → 解析皮肤 → 输出启动脚本；`?skin=&asset=` → 输出模块文件（带 ETag） |
+| `index.php` | 落地页 |
+| `modules/` | 播放器前端：`registry.php` 清单装载；`core/` 引擎（鉴权 / 状态 / 音频内核 / 歌词 / 主题 / UI）；`<皮肤>/` 只负责界面 |
+| `admin/` | 管理后台：`index.php` 入口与路由分发、`api/` 音乐 API 网关与资源中继、`handlers/` 业务逻辑、`pages/` 页面真身、`layout/` 页头页脚、`lib/` 业务库 |
+| `assets/` | 落地页资源（`css/` `js/` 分 pc / mobile）、`lib/` 公共库（数据库抽象、JWT、助手、嵌入脚本）、`lib/aplayer/` 自托管播放内核 |
+| `install/` | 安装向导与数据库迁移（`sql/mysql.sql` 是表结构的**唯一来源**，SQLite 结构由它自动派生） |
+| `config/` | 站点与数据库配置（安装向导生成，不入库） |
+| `AGENTS.md` | 给动手改代码的人看的对照表：每件事改哪个文件、有哪些红线 |
+
+> 文件级清单不抄进文档——它会在升级后变成误导。要看「有哪些文件」直接看代码，
+> 要看「改哪里」看 [AGENTS.md](AGENTS.md)。
 
 ---
 
 ## API 端点
 
+播放器前端只认下面这几个端点（服务端统一在 `admin/api/api.php` 分发）：
+
 | 端点                                         | 方法 | 说明                                             |
 |----------------------------------------------|------|--------------------------------------------------|
 | `/admin/api/api.php?action=verify-key`       | POST | 校验 API 密钥，返回 Token                        |
-| `/admin/api/api.php?action=get-config`       | GET  | 获取歌单与主题配置                               |
+| `/admin/api/api.php?action=get-config`       | GET  | 获取歌单与主题配置（含封面、按皮肤位置）          |
 | `/admin/api/api.php?action=get-announcement` | GET  | 获取当前公告                                     |
 | `/admin/api/api.php?action=playlist`         | GET  | 获取歌单歌曲（参数：`id`、`server`、`limit`）    |
+
+> 还有一组服务端自用的音源代理端点（QQ 音乐 302 跳转、网易云整曲透传、资源中继），
+> 客户端代码不引用它们，按需自取；它们的地址集中在 `admin/api/relay.php`。
 
 ---
 
 ## 技术栈
 
-- **前端**：原生 JavaScript（ES5+）、Shadow DOM、APlayer 1.10.1
-- **后端**：PHP、MySQL / SQLite
+- **前端**：原生 JavaScript（ES5+）、closed Shadow DOM、APlayer 1.10.1
+- **后端**：PHP（无框架）、MySQL / SQLite 双驱动
 - **音乐 API**：QQ 音乐与网易云音乐代理转发
 - **依赖**：嵌入播放器不依赖第三方 CDN——APlayer 1.10.1 只作音频内核，随包自托管（`assets/lib/aplayer/`），可用 `cdn-aplayer-js` 覆盖；界面样式自带，不加载 APlayer 的 CSS
 - **后台资源**：管理端地址集中在 `admin/api/relay.php`（Bootstrap 与后台测试播放器用的 APlayer 走 CDN）
@@ -321,12 +272,8 @@ Msapi/
 
 ## 许可协议
 
-[LICENSE](LICENSE)
+[LICENSE](LICENSE) —— Shunya (Msapi) Source License 1.0：源码可读、可改、可再分发，**禁止商业使用**。
 
 ---
 
-<div align="center">
-
 *献给每一张值得拥有背景音乐的网页。*
-
-</div>
