@@ -1,280 +1,338 @@
-# 顺雅 Shunya
+# dsh-msapi
 
-**你的网站，自带旋律。**
+English | [中文](README.zh.md)
 
-基于 Shadow DOM 隔离的轻量级嵌入式音乐播放器 —— 一行 `<script>` 接入，与宿主页面零 CSS 冲突。
+Embeds the [Msapi](https://msapi.bmwy72.top) music player into DeepSeek Harness. Fill in two
+fields on **Settings → Music Player** — a site URL and an API key — and the player docks onto the
+current window. No extra browser tab, no window switching, no separate player to babysit.
 
-技术栈：PHP 8.5+ · MySQL 5.7+ 或 SQLite 3 · 原生 JavaScript + closed Shadow DOM · APlayer 1.10.1（随包自托管）
-
-[特性](#特性) · [快速开始](#快速开始) · [使用方式](#使用方式) · [管理后台](#管理后台) · [目录一览](#目录一览) · [API-端点](#api-端点) · [技术栈](#技术栈)
-
-> 本文只说明「怎么用」，并且**刻意不复制代码里已有的清单**（皮肤有哪些模块、后台有哪些 action、数据库有哪些表）——
-> 那类清单抄进文档，代码一升级就会从「说明」变成「误导」。要查它们，看代码里的唯一来源；
-> 每件事该改哪个文件，看下面的[目录一览](#目录一览)。
-
----
-
-## 特性
-
-- **Shadow DOM 隔离** — 全部 UI 与样式封装在 `attachShadow({ mode: 'closed' })` 中，宿主页面的 CSS 无法穿透，零冲突嵌入任意网站。
-- **一行嵌入** — 只需一行 `<script>`，播放器以悬浮音符按钮出现在页面右下角。
-- **双音源** — 同时支持 QQ 音乐与网易云音乐歌单，一键切换。
-- **歌词同步** — 实时解析 LRC 时间轴并逐行高亮，自动识别纯音乐。
-- **沉浸模式** — 全屏播放，大尺寸封面、滚动歌词与完整控制栏。
-- **暗色主题** — 按北京时间（18:00–06:00）自动切换深浅色，也可手动固定。
-- **自由拖拽** — 悬浮按钮可拖至屏幕任意位置，松手自动吸附屏幕边缘；**严格限制在视口内**，不会跑到屏幕外。
-- **智能停靠** — 按钮上方剩余空间**不足以显示面板 1/3** 时，面板改为**向下浮出**（左上 / 右上角各自对齐）；
-  够 1/3 就维持向上浮出，放不下时把按钮往下挤，且面板顶部不会越过屏幕。
-  浮出方向只在拖拽松手时锁定一次，面板开合造成的按钮挪动不会反过来改变方向；
-  **挤压后的位置就是新位置，收起面板不回正**。窗口尺寸变化后按当前停靠侧重排，不会跑到另一侧。移动端固定向上浮出。
-- **音量增强** — 基于 Web Audio API 的三档增益：1× / 2× / 3×。
-- **播放模式** — 列表循环、单曲循环、随机播放。
-- **Cookie 持久化** — 跨会话记忆音量、歌单、播放进度与主题偏好。
-- **隐私合规** — 内置 Cookie 授权弹窗，用户明确同意后才写入数据。
-- **管理后台** — 在 `/admin/` 中管理 API 密钥、歌单、封面、公告、邮件、存储与调用统计。
-
----
-
-## 快速开始
-
-### 环境要求
-
-| 组件       | 最低版本                        |
-|------------|---------------------------------|
-| PHP        | 8.5+                            |
-| 数据库     | MySQL 5.7+ 或 SQLite 3          |
-| Web 服务器 | Apache / Nginx / PHP 内置服务器 |
-
-### 安装步骤
-
-1. 将项目**克隆或解压**到 Web 服务器目录（如 `/var/www/msapi` 或 `C:\xampp\htdocs\msapi`）。
-2. 将 Web 服务器的站点根**指向**项目目录。
-3. 浏览器访问 `/install/`，安装向导会引导完成：
-   - 数据库配置（MySQL 或 SQLite）
-   - 管理员账户创建
-   - 初始 API 密钥设置
-4. 安装完成后，建议**删除或限制** `/install/` 目录的访问权限。
-
-> 如果 `config/config.php` 已存在且配置正确，安装程序会自动跳过。
-
-### 生产环境必需的 PHP 设置
-
-安装完成后，请在 php.ini / php-fpm 池配置中确认以下两项。**开发机上开着它们很方便，直接搬到线上则是信息泄漏与性能问题。**
-
-| 设置 | 生产值 | 为什么 |
-|---|---|---|
-| `display_errors` | `0`（并配 `log_errors = 1`） | 报错会把绝对路径、SQL 片段、连接信息直接回给访客；只允许写日志 |
-| `xdebug.mode` | `off` | Xdebug 会显著拖慢执行，其错误输出还会暴露本地路径与源码行 |
-
-```ini
-; php.ini（生产）
-display_errors = 0
-log_errors     = 1
-xdebug.mode    = off
+```
+┌─ Music Player ────────────────────────────────────────┐
+│  Site URL                                             │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ https://msapi.bmwy72.top                        │  │
+│  └─────────────────────────────────────────────────┘  │
+│  Leave empty to use the official site                 │
+│                                                       │
+│  API key                                              │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ ••••••••••••••••••••••••                        │  │
+│  └─────────────────────────────────────────────────┘  │
+│  Stored · fingerprint a1b2c3d4 · 32 chars             │
+│                                                       │
+│  ● Connected · 3 playlists · 128 songs · 182ms        │
+│                            [Save] [Test] [Turn off]   │
+└───────────────────────────────────────────────────────┘
 ```
 
-> `install/` 目录下的安装向导是**唯一**按需开启报错显示的地方：未安装时便于排错，
-> 安装完成后自动关闭（见 `install/includes/guard.php`）。这不替代上面的全局设置。
+---
 
-### 部署前必须配置的两项
+## Contents
 
-写进 `config/config.php`（该文件不入库，每个部署点各自生成）：
+- [What it does](#what-it-does)
+- [Install](#install)
+- [Configuration](#configuration)
+- [Where state lives](#where-state-lives)
+- [How it works](#how-it-works)
+- [Security](#security)
+- [Known limits](#known-limits)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [License](#license)
 
-| 配置 | 不配的后果 |
+## What it does
+
+- Adds a **Music Player** tab to the Settings sidebar. That page has exactly **two inputs** — a
+  site URL and an API key — plus buttons and one status line.
+- An empty URL means the official site, `https://msapi.bmwy72.top`.
+- Saving probes the site once and reports, on one line, whether the gateway answered, whether the
+  key was accepted, and how many playlists and songs the account holds.
+- With a valid key and the player switched on, the Msapi embed script is injected and the player
+  appears at the bottom right, just above the composer.
+- The player's own immersive mode fills **the viewport this plugin hands it**, not the whole screen.
+- Volume, playback mode, the last song and the resume position survive a DSH restart — which they
+  do not do on their own inside the desktop shell. See [Where state lives](#where-state-lives).
+
+## Install
+
+The project lives at **<https://github.com/Freewind72/dsh-msapi>**.
+
+The DSH Desktop `desktop` profile installs plugins through the GUI only — the CLI refuses it:
+
+1. Open **Settings → Plugins**.
+2. Choose **install by package**, and give it:
+
+   ```
+   github:Freewind72/dsh-msapi
+   ```
+
+3. Enable it, then reload the page (`Ctrl+R`).
+
+`github:owner/repo` is the shorthand the plugin manager hands to pnpm, so it fetches the repository
+directly — no npm publish needed. A published package name would work the same way.
+
+Working on a local checkout instead? Use **install from a local directory** and point it at your
+clone; the trade-off is that you have to run `pnpm install` yourself if you ever add a dependency.
+
+A restart of DSH — not just a page reload — is required after changing any file in `lib/`, because
+the host reads and caches the client bundle at startup.
+
+## Configuration
+
+| Field | Meaning |
 |---|---|
-| `api.jwt_secret` | **必须**填 ≥32 字符高熵随机值（`php -r "echo bin2hex(random_bytes(32));"`）。缺失时签名密钥函数直接抛异常，不会回退到「用数据库密码派生」——那种回退把签名密钥的熵压缩成数据库密码，拖库即可伪造任意 Token |
-| `site.url` | 部署到真实域名时必须改成实际域名。否则 WebAuthn 的域名锚定（RP ID）会退化成跟随请求的 `Host` 头，防钓鱼保证由此丧失 |
-| `api.demo_key` | 落地页「演示播放器」专用密钥。**留空则不显示演示播放器**（安全默认值）。切勿填站长正式密钥：它会被拼进页面 HTML 下发给所有访客 |
+| **Site URL** | The site **root**, e.g. `https://msapi.bmwy72.top`. Empty = official site, also used when the field is left blank. A full endpoint such as `https://x.top/admin/api/api.php` is trimmed back to its root automatically. |
+| **API key** | The key from the Msapi admin **Keys** page. After saving, the browser only ever sees a fingerprint. |
 
-### PHP 内置服务器（快速测试）
+The status line reports one of:
+
+- `Connected · 3 playlists · 128 songs · 182ms`
+- `The key is not valid` / `The key is disabled` / `The gateway received no key`
+- `Cannot reach the server`
+
+**Save** writes the settings and probes once. **Test** probes the values currently in the fields
+without saving them. **Turn on / Turn off** controls whether the player is mounted at all, so you
+can keep a key configured without a player on screen.
+
+### Self-hosting
+
+Prefer not to depend on the official site? [Shunya](https://github.com/Freewind72/Shunya) is the
+companion self-hosted server — run your own Msapi instance and point the plugin at
+`http://127.0.0.1:port`. Loopback and private addresses are allowed; the probe only refuses
+link-local targets such as cloud metadata endpoints (see [Security](#security)).
+
+## Where state lives
+
+```
+$DSH_HOME/dsh-msapi/config.json      (mode 0600)
+```
+
+One file only:
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "url": "",                                  // as typed; "" means the official site
+  "key": "…",                                 // never sent back to the browser
+  "gatewayPath": "/admin/api/api.php",        // the path that last answered
+  "enabled": true,
+  "updatedAt": "2026-11-11T09:33:49.745Z",    // when the file was last written
+  "lastProbe": { "…": "…" },                  // so the page can show a status line at load
+  "playerState": {                            // the emulated cookie jar
+    "mapi_cookie_consent": "granted",
+    "mapi_state_dsh-msapi": "{\"v\":2,…}"
+  }
+}
+```
+
+Writes are atomic (`.tmp` → rename), so a crash mid-write leaves the previous file intact. A file
+that fails to parse is renamed to `config.json.corrupt-<timestamp>` and defaults take over — a
+half-written file must never wedge the plugin.
+
+Deliberately **not** used for storage:
+
+- **`cordis.patch.yml`** — DSH treats that document as shareable. A secret does not belong there.
+- **`localStorage`** — scoped to an origin, and an origin includes the port.
+- **Cookies** — see below.
+
+### Why the player's memory cannot use cookies
+
+The player keeps everything in `document.cookie`: `core/state.js` writes `mapi_state_<instance>`,
+and `core/auth.js` reads `mapi_cookie_consent` before it will boot at all.
+
+**Cookies do not work on the `dsh-app://` scheme the desktop shell serves the UI from.** Assignment
+is silently ignored and the getter always returns `""` — no error, no warning. A diagnostics report
+from a live page settled it: `href: "dsh-app://app/"`, an empty jar, the player running happily.
+
+So the jar is emulated. The plugin replaces the player's own cookie seam:
+
+```js
+MP._.setCookie / getCookie / delCookie   ← redirected to an in-memory jar
+```
+
+Every part of the player (`state.js`, `auth.js`, `theme.js`) already goes through those three, so
+redirecting them is enough and the player's code is untouched. The durable copy lives in
+`config.json` under `playerState`:
+
+- before booting the player the page calls `GET /dsh-msapi/state` and refills the jar, so
+  `loadState` sees what looks like a cookie it just wrote itself;
+- afterwards it pushes changes on a 4s tick and on `pagehide`, and **only when the jar is dirty** —
+  the player rewrites its cookie as often as twice a second, so a naive timer would flood the host;
+- the browser sends its whole jar, and the host **replaces** rather than merges, so a cookie the
+  player deleted actually disappears.
+
+#### The consent cookie is the master switch
+
+`api.php` boots as `verifyKey → showConsentBanner(callback) → get-config`. An unanswered cookie
+banner therefore does not merely switch persistence off — it **stops the player from loading at
+all**, playlists included.
+
+With the bridge in place the banner reads the emulated jar, which already says `granted`, so it
+never renders. If one was on screen before the bridge landed, the 4s tick accepts it on the user's
+behalf. Only ever *accept*: silently answering "deny" would be worse than leaving the question
+open.
+
+## How it works
+
+The interesting part is the viewport, because the player was written to own the whole screen.
+
+### The viewport
+
+The player's host element is moved into a container this plugin owns. That container sets
+`transform`, which makes it the **containing block** for every `position: fixed` descendant — so
+the player's idea of "the screen" becomes this box, and the plugin decides its size.
+`isolation: isolate` keeps the player's `z-index: 2147483647` from climbing over DSH's dialogs.
+
+### Clearing the caption bar
+
+DSH Desktop draws minimise / maximise / close *inside* the window, so the container must not run to
+the very top.
+
+The clearance is **measured in JavaScript**, not hardcoded. DSH's `lib/preload-app.cjs` writes:
+
+```js
+root.dataset.windowsTitlebar = "";
+root.style.setProperty("--dsh-windows-titlebar-height", "40px");
+```
+
+The plugin reads that inline property, falls back to the marker attribute (Windows 40px, macOS
+48px, fullscreen 0), and writes the result as an **inline** `--dms-top-clear` on the container. An
+earlier version derived it purely in CSS; when the selector missed, the entire `clip-path` was
+dropped and the player sat underneath the caption buttons.
+
+`clip-path`, not a `top` inset: an inset only moves where the box starts, while a dragged player
+writes absolute coordinates and would still paint over the caption bar. Clipping removes that strip
+from painting *and* hit-testing without changing any child coordinate, so the player's own drag
+maths stays correct.
+
+Two things sit inside that clipped strip and need shifting down by the same amount, or they would
+be invisible:
+
+- the player's toast layer, pinned at `top: 16px` — otherwise "the key is not valid" never shows;
+- the immersive layer's close button, which lives in a bar at `top: 0`.
+
+### The immersive layer
+
+That layer is inside a `attachShadow({mode: "closed"})` tree, which no outside selector can reach.
+What *is* reachable is the shadow root the player keeps on itself (`MP._hostRoot`), so the plugin
+appends a `<style>` there, moves the whole layer below the clearance, and re-applies the skin's own
+top padding to the close area so the button lands where its author intended.
+
+### The lyric strip
+
+The strip is attached to the host page's `body` (the skins use a closed shadow root, so core keeps
+it outside) and core sizes it as `span.scrollWidth + 42`. That 42 is 40px of horizontal padding plus
+a 2px breath, and it only equals the pill's *total* width under `box-sizing: border-box` — which
+Msapi's own stylesheet sets globally (`assets/css/pc.css`: `*, *::before, *::after`).
+
+Embedded in DSH the strip inherits no such reset, so the same `width` becomes a *content* width and
+40px of padding lands on top: the pill paints `scrollWidth + 82` wide against `scrollWidth + 42` of
+text. That surplus is the gap after the words, and the skewed ratio is what reads as "deformed".
+The plugin pins the strip back to `border-box` and leaves the skin's padding alone.
+
+### Moving the player area
+
+A 10px handle sits on the viewport's top edge and turns blue on hover. Dragging it moves the whole
+player area down, out of the way of anything covering it; drag it back to the minimum and it sits
+just below the caption bar. The handle follows the clearance automatically and moves to the very
+top in fullscreen. The position is remembered for the session only.
+
+## Security
+
+**The key appears in the page as a `<script src>` query parameter.**
+
+That is the Msapi embedding contract — the official snippet is
+`<script src="https://site/api.php?key=YOUR_KEY"></script>`, and the player needs the key to call
+its own API. What this plugin does protect:
+
+- the key lives only in the local `config.json` (mode 0600);
+- the Settings page never echoes it — only the first 8 hex characters of its SHA-256;
+- `GET /dsh-msapi/settings` never returns it to the browser.
+
+The `<script src>` line in the DOM is unavoidable, and any same-origin script or browser extension
+can read it. If that is unacceptable in your environment, do not enable the player there.
+
+Also worth knowing:
+
+- Mutations (`PUT`, `POST`) require the GUI's signed session cookie, the same gate
+  `dsh-windows-mcp` uses. A script, or a model with shell access, cannot repoint the player at a
+  site of its choosing.
+- The probe refuses link-local (`169.254.*`, `fe80:*`) and unique-local (`fc00::/7`) addresses. It
+  fetches from the host process, which sits behind no proxy, so an unrestricted URL field would be
+  an SSRF primitive against cloud metadata endpoints. Loopback and private ranges stay allowed on
+  purpose: a self-hosted Msapi on `http://127.0.0.1:8080` is a supported setup.
+- An unexpected 500 returns `internal error`, not the underlying message, which could carry a
+  filesystem path. The detail goes to the host log.
+
+## Known limits
+
+- **Domain authorization**: when Msapi binds a key to an allowed domain it judges the request by its
+  `Referer` / `Origin`. The page runs on the `dsh-app://` scheme, which normally sends neither, so
+  the check is skipped. Should that change and a request be refused as `domain_blocked`, add the
+  reported host on the Msapi Domains page.
+- **Renamed admin directory**: the gateway is probed as `/admin/api/api.php` then `/api/api.php`,
+  and the working path is remembered. The embed script needs no help — `api.php` injects the real
+  directory name itself.
+- **One site and one key at a time.**
+- **Not a general-purpose player**: it embeds Msapi, and inherits whatever Msapi supports.
+
+## Troubleshooting
+
+**The plugin does not appear, and DSH says the package is invalid.**
+Almost always a **UTF-8 BOM** at the start of `package.json`. DSH loads it with a bare
+`JSON.parse(readFileSync(path, "utf8"))`, and a BOM makes that throw — reported as an invalid
+package, with every route 404 and no other clue. Check the first three bytes are not `EF BB BF`:
+
+```powershell
+[System.IO.File]::ReadAllBytes('package.json')[0..2] | % { $_.ToString('X2') }
+```
+
+**Code changes have no effect, even after a page reload.**
+The host reads and caches the client bundle at startup, and the `?rev=` in the bundle URL is derived
+from file metadata at that moment. A page reload cannot pick up new code. Restart DSH.
+
+**The player overlaps the caption buttons.**
+`--dsh-windows-titlebar-height` was not readable. The plugin falls back to the
+`data-windows-titlebar` marker (40px), so this should not happen; if it does, report the value
+`document.documentElement.style.getPropertyValue("--dsh-windows-titlebar-height")` returns.
+
+**Volume, mode and resume position are forgotten.**
+Check the emulated jar actually holds something:
+
+```powershell
+Get-Content "$env:USERPROFILE\.dsh\dsh-msapi\config.json" | Select-String playerState
+```
+
+If `playerState` is `null`, the cookie bridge never ran. `GET /dsh-msapi/diagnostics` explains what
+the page observed — whether `apply` ran, how many embed scripts were injected, what the jar holds,
+and what the last host call returned.
+
+**Nothing plays, but the status line says Connected.**
+The key is fine and the gateway answers; the problem is downstream. The player shows its own notice
+("no playlists yet", "the CDN is unreachable"), and those notices are what the top-clearance shift
+above exists to keep visible.
+
+## Development
 
 ```bash
-php -S 127.0.0.1:8080 -t /path/to/Msapi
+node --check lib/index.js
+node --check lib/client.js
 ```
 
-然后打开 `http://127.0.0.1:8080/install/` 开始配置。
-
----
-
-## 使用方式
-
-### 嵌入播放器
-
-在任意页面的 `</body>` 之前添加一行 `<script>`：
-
-```html
-<script src="https://your-domain.com/api.php?key=YOUR_API_KEY" defer></script>
+```
+lib/
+  index.js          host half: five routes, the auth gate, error shaping
+  config.js         config.json I/O, URL normalisation, host allow-list
+  msapi.js          one probe against a Msapi gateway
+  player-state.js   the emulated cookie jar
+  client.js         prebuilt browser bundle (settings page, viewport, patches)
 ```
 
-播放器随即出现，所有访客无需注册即可收听。
+`lib/client.js` is a **prebuilt** browser bundle in the `window.__ModuleLoader__.load({...})` form,
+hand-written with `React.createElement` and no build step — the host serves built bundles as files,
+it does not compile them. Keeping it that way is deliberate: a plugin that needs a build toolchain
+is a plugin most people cannot patch.
 
-- **密钥走 URL 查询参数**，不再放在自定义属性上 —— 有些平台的编辑器或 HTML 净化器会剥掉
-  非标准属性（`key="..."`），剥不掉查询参数。
-- 服务端按密钥解析到归属用户，用**该用户后台配置的皮肤**渲染。
-- 想临时换一套皮肤，在同一个 URL 上加 `&route=<皮肤名>` 即可覆盖。
+## License
 
-> **旧写法已停用**：`<script src=".../modules/api.php?route=router" key="...">`。
-> 原因：密钥放在标签属性上时**服务端读不到**，只有 URL 查询参数才可靠。
-> 老代码请改成上面那一行 —— 旧入口现在只会在控制台打印一句升级提示，不再提供播放器。
-
-> **请务必加上 `defer`。** 这是一个第三方域名的脚本，不加 `defer` 时浏览器会停下来等它下载并执行完
-> 才继续解析页面，直接拖慢首屏；加上 `defer` 后它会在文档解析完成后执行，效果完全一致。
-> 如果宿主平台支持把代码注入到页脚，放在 `</body>` 前同样可以。
-
-### 同页放多个播放器（必须显式区分）
-
-播放器的「重复执行保护」按**配置**去重，而不是按标签位置：同一个 `key` + 同一个 `api`
-（未指定 `data-player-id` 时）会派生出**同一个去重键**，于是同页第二个完全相同的
-`<script>` 会被判定为「这个播放器已经在跑了」而**静默跳过** —— 结果就是「第二个播放器不出现」。
-
-要让同页两个播放器共存，**必须给它们不同的 `data-player-id`**：
-
-```html
-<script src="https://your-domain.com/api.php?key=YOUR_API_KEY" data-player-id="bgm-a" defer></script>
-<script src="https://your-domain.com/api.php?key=YOUR_API_KEY" data-player-id="bgm-b" defer></script>
-```
-
-`data-player-id` 同时决定各自的 Cookie 命名空间，两个播放器的音量/进度/歌单记忆互不干扰。
-
-> 被去重跳过时，控制台会打印一条 `[Msapi]` 开头的 `console.info` 说明原因 ——
-> 这个行为本身是必要的（Swup / Pjax / Turbo 这类无刷新框架会重执行脚本，不能重建播放器），
-> 所以才用显式 `data-player-id` 来表达「我确实要两个」。
-
-### 播放器皮肤
-
-皮肤在后台「音乐配置 → 播放器皮肤」里选择，对该账号下所有密钥生效；
-URL 上的 `?route=` 可临时覆盖。
-
-| route | 形态 | 特点 |
-|---|---|---|
-| `router` | 悬浮圆钮 + 展开式玻璃面板 | 可拖拽、边缘吸附、顶部停靠、沉浸模式 |
-| `rose` | 玫瑰玻璃**侧边常驻卡片** | **不可拖动**，只贴左右边；贴边橙色箭头收起/展开；自带歌单列表；移动端为底部抽屉 |
-
-```html
-<!-- 这一处嵌入强制用侧边卡片，不受后台设置影响 -->
-<script src="https://your-domain.com/api.php?key=YOUR_API_KEY&route=rose" defer></script>
-```
-
-皮肤只负责 DOM 与样式；鉴权、播放内核、状态、歌词、歌单渲染由 `modules/core/` 统一提供。
-**新增皮肤 = 在 `modules/<name>/` 下建目录 + 写 `skin.json` + 写 `widget.js`（DOM 与 `MP._css`）
-与皮肤行为文件**，分发器与后台都会自动读到，不需要改任何代码。
-
-> 皮肤与引擎模块的字段契约、清单装载规则见 `modules/registry.php` 与各 `skin.json` / `core.json`。
-
-### 对宿主页面的侵入性
-
-播放器按"可能嵌在任何人博客上"的前提设计，不会改动宿主页面：
-
-- **不锁滚动** — cookie 授权提示是一个停在左下角的小卡片，页面照常可读可滚，不铺全屏遮罩。
-- **不改滚动条** — 不注入任何影响 `html` / `body` 滚动条的样式；播放器自身的滚动区域都在 shadow root 内。
-- **可还原的临时样式** — 沉浸模式会临时锁滚动，退出时还原宿主原本的内联 `overflow` 值，而不是清空。
-
-### 启动脚本支持的属性
-
-嵌入脚本支持在 `<script>` 标签上设置以下属性：
-
-| 属性               | 说明                             | 默认值       |
-|--------------------|----------------------------------|--------------|
-| `key`              | API 密钥（必填）                 | —            |
-| `token`            | 预验证的授权令牌（跳过密钥校验） | —            |
-| `api`              | 自定义 API 端点 URL              | 自动检测     |
-| `data-player-id`   | 多实例标识（同页跑两个播放器时用于区分各自的 Cookie 记忆） | 由 `key` 派生 |
-| `cdn-aplayer-js`   | 自定义 APlayer 内核地址          | 本站自托管   |
-
-> APlayer 内核（JS）已随项目自带（`assets/lib/aplayer/`），默认走本站，**不依赖任何第三方 CDN**；
-> 只有需要换成别的版本或别的源时，才用上面的属性覆盖。
-
-> **播放器界面完全自绘，不加载 APlayer 自带样式表。** APlayer 在这里只当音频内核用，
-> 它的 DOM 被放进 closed shadow root 里一个 `display:none` 的容器，库自带的 `.aplayer*` 皮肤
-> 既进不来也用不上。因此项目不分发、也不请求 `APlayer.min.css` ——
-> 界面样式全部来自 `widget.js` 中内联进 shadow root 的 `MP._css`。
-
-> **跨域说明**：`<script src>` 属于普通资源，跨域加载**不受 CORS 限制**（只要不加 `crossorigin` 属性，
-> 本项目没有加）。真正需要 CORS 的是播放器的 XHR 请求（`verify-key` / `get-config` / `playlist`）
-> 与音频流，接口侧已统一返回 `Access-Control-Allow-Origin: *`。
-
-> **无刷新换页框架（Swup / Pjax / Turbo）下是安全的**：这类框架会重执行 `<head>` 里的脚本，
-> 播放器据此做了幂等处理——识别到同一个播放器仍在运行时直接退出，不会重建、不会重复出声、播放进度不中断。
-> 重复执行时只会创建**一个**实例；只有宿主已被移除或启动失败时才会重建。
-> 若要在同一页面放两个播放器，请为它们分别指定不同的 `data-player-id`。
-
-### 首页在未安装 / 从未进过后台的实例上会怎样
-
-落地页 `index.php` 不跑数据库迁移（迁移含 DDL 写操作，不该由匿名访客的 GET 触发，也不该落在访问量最大的入口上）。
-它只做一次**极轻量体检**——判断自己真正会用到的表是否存在，缺失时给出**可操作提示**（去登录后台或跑 `/install/upgrade.php`），
-**不自动补表**。所以「只部署首页、从未进后台」的实例会看到一条醒目提示，而不是白屏。
-
----
-
-## 管理后台
-
-登录 `/admin/` 后可配置以下项：
-
-- **歌单** — 添加 QQ 音乐或网易云音乐歌单，同步歌曲与封面
-- **封面** — 本地化预热、无用封面回收
-- **主题** — 自动（按时间）或强制浅色 / 深色
-- **自动播放** — 页面加载时是否自动播放
-- **歌词** — 默认歌词显示开关
-- **服务器** — 默认音乐源（腾讯 / 网易）
-- **公告** — 向所有嵌入播放器推送广播消息
-- **密钥 / 域名** — API 密钥管理与按域名的调用授权
-- **用户** — 三级角色账号管理（超管 / 管理员 / 普通用户）
-- **邮件 / 存储** — SMTP 发信、S3 兼容对象存储
-- **缓存** — Redis 播放器缓存（上游解析结果、歌单配置、播放器状态）
-
-> 后台页面地址是**带尾斜杠的目录形态**（`/admin/<action>/`），靠服务器内置的「目录补斜杠 + `index index.php`」跑通，
-> **不需要任何 rewrite / try_files / error_page 配置**。页面清单与 action 白名单的唯一来源是
-> `admin/includes/routes.php`，不在文档里抄。
-
----
-
-## 目录一览
-
-| 路径 | 放什么 |
-|---|---|
-| `api.php` | 播放器总入口（嵌入用，唯一对外入口）：`?key=` → 解析皮肤 → 输出启动脚本；`?skin=&asset=` → 输出模块文件（带 ETag） |
-| `index.php` | 落地页 |
-| `modules/` | 播放器前端：`registry.php` 清单装载；`core/` 引擎（鉴权 / 状态 / 音频内核 / 歌词 / 主题 / UI）；`<皮肤>/` 只负责界面 |
-| `admin/` | 管理后台：`index.php` 入口与路由分发、`api/` 音乐 API 网关与资源中继、`handlers/` 业务逻辑、`pages/` 页面真身、`layout/` 页头页脚、`lib/` 业务库 |
-| `assets/` | 落地页资源（`css/` `js/` 分 pc / mobile）、`lib/` 公共库（数据库抽象、JWT、助手、嵌入脚本）、`lib/aplayer/` 自托管播放内核 |
-| `install/` | 安装向导与数据库迁移（`sql/mysql.sql` 是表结构的**唯一来源**，SQLite 结构由它自动派生） |
-| `config/` | 站点与数据库配置（安装向导生成，不入库） |
-
-> 文件级清单不抄进文档——它会在升级后变成误导。要看「有哪些文件」直接看代码，
-> 要看「每件事该改哪个文件」，顺着上面这张表再往下读对应目录。
-
----
-
-## API 端点
-
-播放器前端只认下面这几个端点（服务端统一在 `admin/api/api.php` 分发）：
-
-| 端点                                         | 方法 | 说明                                             |
-|----------------------------------------------|------|--------------------------------------------------|
-| `/admin/api/api.php?action=verify-key`       | POST | 校验 API 密钥，返回 Token                        |
-| `/admin/api/api.php?action=get-config`       | GET  | 获取歌单与主题配置（含封面、按皮肤位置）          |
-| `/admin/api/api.php?action=get-announcement` | GET  | 获取当前公告                                     |
-| `/admin/api/api.php?action=playlist`         | GET  | 获取歌单歌曲（参数：`id`、`server`、`limit`）    |
-
-> 还有一组服务端自用的音源代理端点（QQ 音乐 302 跳转、网易云整曲透传、资源中继），
-> 客户端代码不引用它们，按需自取；它们的地址集中在 `admin/api/relay.php`。
-
----
-
-## 技术栈
-
-- **前端**：原生 JavaScript（ES5+）、closed Shadow DOM、APlayer 1.10.1
-- **后端**：PHP（无框架）、MySQL / SQLite 双驱动
-- **音乐 API**：QQ 音乐与网易云音乐代理转发
-- **依赖**：嵌入播放器不依赖第三方 CDN——APlayer 1.10.1 只作音频内核，随包自托管（`assets/lib/aplayer/`），可用 `cdn-aplayer-js` 覆盖；界面样式自带，不加载 APlayer 的 CSS
-- **后台资源**：管理端地址集中在 `admin/api/relay.php`（Bootstrap 与后台测试播放器用的 APlayer 走 CDN）
-
----
-
-## 许可协议
-
-[LICENSE](LICENSE) —— Shunya (Msapi) Source License 1.0：源码可读、可改、可再分发，**禁止商业使用**。
-
----
-
-*献给每一张值得拥有背景音乐的网页。*
+[MIT](LICENSE). Free to use, study, modify, share — including commercially.
